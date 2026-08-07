@@ -22,7 +22,7 @@ A broad overview of the workflow is:
 
 Providers live in `providers-directory/providers.csv`. Checklist + per-source files live in
 `sources/` (`checklist.csv`, `<source_id>/metadata.yaml`); the tools that manage them are in
-`lode/src/lode/tools/checklist/`.
+`src/lode/tools/checklist/`.
 
 **Workflow**
 - `lode tools checklist sync` — builds/updates `checklist.csv` from `providers.csv`. Safe to

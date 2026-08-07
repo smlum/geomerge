@@ -2,9 +2,8 @@
 
 The lode package is a collection of tools for creating lode datasets.
 
-Currently developed inside the `bikeways` repo, installed editable from this path; the intent
-is to split it into its own repo once the interface stabilizes (see `pyproject.toml` — it's
-already a standalone installable package, just physically nested here for now).
+Standalone, installable package (`pyproject.toml`), meant to be consumed by a project repo
+(e.g. `bikeways`) as a git submodule rather than copied in.
 
 ## What are LODE datasets?
 
@@ -40,8 +39,8 @@ lode pipeline <stage-name> [--source ID]   # sugar for 'run --stage <stage-name>
 
 Repo-root/config discovery (`lode.config.yaml`) is based on the current working directory, not
 on where `lode`'s own code lives — like `git`/`npm`, it's a tool you run *against* a project,
-not something tied to a single checkout. Run `lode` commands from inside the project repo (here,
-`bikeways`).
+not something tied to a single checkout. Run `lode` commands from inside whichever project repo
+you're using it for.
 
 ### Pipeline
 
@@ -56,9 +55,19 @@ self-contained scripts living in the parent repo's `tools/` directory, run direc
 
 ## Installation
 
+In a project repo, add as a submodule and install editable:
+
 ```bash
-# from the bikeways repo root, editable install
+git submodule add https://github.com/smlum/lode.git lode
 pip install -e ./lode
+```
+
+Cloning a project that already depends on `lode` needs the submodule pulled in too:
+
+```bash
+git clone --recurse-submodules <project-url>
+# or, after a plain clone:
+git submodule update --init
 ```
 
 ## Setup
