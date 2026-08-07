@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Checklist</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="title-block">
+      <h1>Data source checklist</h1>
+      <div id="checklist-path" class="meta"></div>
+    </div>
+    <div id="progress"></div>
+    <label class="toggle">
+      Show:
+      <select id="filter-mode">
+        <option value="all">All</option>
+        <option value="unchecked" selected>Unchecked</option>
+        <option value="metadata_incomplete">Metadata incomplete</option>
+        <option value="metadata_complete">Completed</option>
+      </select>
+    </label>
+  </header>
+  <table id="rows">
+    <colgroup>
+      <col style="width: 210px" />
+      <col style="width: 140px" />
+      <col style="width: 195px" />
+      <col style="width: 260px" />
+      <col style="width: 160px" />
+      <col />
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Portal</th>
+        <th>Actions</th>
+        <th>Source URL</th>
+        <th>Metadata</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody id="rows-body"></tbody>
+  </table>
+
+  <div id="metadata-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="title-block">
+          <h2 id="modal-title"></h2>
+          <div id="modal-path" class="meta"></div>
+        </div>
+        <button id="modal-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <form id="metadata-form" class="edit-form"></form>
+      <div class="modal-actions">
+        <button id="modal-save">Save</button>
+        <span id="modal-save-status" class="meta"></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Column mapping</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="title-block">
+      <h1 id="title"></h1>
+      <div id="raw-path" class="meta"></div>
+    </div>
+    <a href="index.html" class="back-link">&larr; All sources</a>
+  </header>
+  <div class="table-scroll">
+    <table id="rows">
+      <colgroup>
+        <col style="width: 200px" />
+        <col style="width: 150px" />
+        <col style="width: 70px" />
+        <col style="width: 70px" />
+        <col style="width: 260px" />
+        <col style="width: 220px" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Raw column</th>
+          <th>Type</th>
+          <th>Nulls</th>
+          <th>Unique</th>
+          <th>Samples</th>
+          <th>Target</th>
+        </tr>
+      </thead>
+      <tbody id="rows-body"></tbody>
+    </table>
+  </div>
+
+  <div id="missing-targets" class="missing-targets hidden"></div>
+
+  <div id="width-unit-row" class="width-unit-row hidden">
+    <label>
+      Width unit (for source_width columns)
+      <input type="text" id="width-unit" placeholder="e.g. m, ft" />
+    </label>
+  </div>
+
+  <div class="save-row">
+    <button id="save-next-btn">Save &amp; next</button>
+    <button id="save-back-btn">Save &amp; back to list</button>
+    <span id="save-status" class="meta"></span>
+  </div>
+
+  <script src="map.js"></script>
+</body>
+</html>

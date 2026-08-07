@@ -1,0 +1,29 @@
+[project]
+name = "lode"
+version = "0.1.0"
+description = "Tools and pipeline for building geospatial datasets from open-data sources."
+requires-python = ">=3.10"
+dependencies = [
+    "geopandas",
+    "shapely",
+    "pyproj",
+    "pyyaml",
+    "numpy",
+    "pyarrow",
+    "pandas",
+    "flask",
+]
+
+[project.scripts]
+lode = "lode.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"lode.tools.column_mapping.web" = ["*.html", "*.js", "*.css"]
+"lode.tools.checklist.web" = ["*.html", "*.js", "*.css"]
