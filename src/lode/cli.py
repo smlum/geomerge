@@ -2,9 +2,8 @@
 """Top-level `lode` CLI — dispatches to tools/ (human-reviewed decisions) and
 pipeline/ (mechanical processing driven by those decisions).
 
-    lode tools checklist sync|review|process|scaffold [-- script args]
-    lode tools column-mapping
-    lode tools classification
+    lode tools home                            # every tool's web UI, one process/port
+    lode tools collection sync|process|scaffold [-- script args]
     lode pipeline run [--stage NAME] [--source ID]
     lode pipeline <stage-name> [--source ID]   # sugar for 'run --stage <stage-name>'
 """
@@ -14,9 +13,9 @@ import sys
 
 from lode.helpers.config import load_config
 
-# checklist commands whose flags are defined by their own script, not by this
+# collection commands whose flags are defined by their own script, not by this
 # CLI — see main()'s use of parse_known_args.
-PASSTHROUGH_CHECKLIST_COMMANDS = {"sync", "process", "scaffold"}
+PASSTHROUGH_COLLECTION_COMMANDS = {"sync", "process", "scaffold"}
 
 
 def _pipeline_argv(stage, source):
@@ -35,15 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
     tools_parser = subparsers.add_parser("tools", help="Interactive review tools (human in the loop)")
     tools_sub = tools_parser.add_subparsers(dest="tool", required=True)
 
-    checklist_parser = tools_sub.add_parser("checklist", help="Provider checklist tool")
-    checklist_sub = checklist_parser.add_subparsers(dest="checklist_command", required=True)
-    checklist_sub.add_parser("review", help="Web UI for working through the checklist")
-    checklist_sub.add_parser("sync", help="Refresh checklist.csv from providers.csv")
-    checklist_sub.add_parser("process", help="Stamp checked_date for rows checked outside the web UI")
-    checklist_sub.add_parser("scaffold", help="Manually scaffold metadata.yaml for one provider+slug")
+    tools_sub.add_parser("home", help="Every tool's web UI, mounted under one process/port")
 
-    tools_sub.add_parser("column-mapping", help="Web UI for mapping raw columns onto the target schema")
-    tools_sub.add_parser("classification", help="Web UI for classifying raw values onto the target schema")
+    collection_parser = tools_sub.add_parser("collection", help="Provider/source collection scripts (web UI is under 'home')")
+    collection_sub = collection_parser.add_subparsers(dest="collection_command", required=True)
+    collection_sub.add_parser("sync", help="Refresh checklist.csv from providers.csv")
+    collection_sub.add_parser("process", help="Stamp checked_date for rows checked outside the web UI")
+    collection_sub.add_parser("scaffold", help="Manually scaffold metadata.yaml for one provider+slug")
 
     pipeline_parser = subparsers.add_parser("pipeline", help="Mechanical, no-human-in-the-loop data processing")
     pipeline_sub = pipeline_parser.add_subparsers(dest="pipeline_command", required=True)
@@ -71,31 +68,24 @@ def main(argv=None):
     args, extras = parser.parse_known_args(argv)
     passthrough = (
         args.command == "tools"
-        and args.tool == "checklist"
-        and args.checklist_command in PASSTHROUGH_CHECKLIST_COMMANDS
+        and args.tool == "collection"
+        and args.collection_command in PASSTHROUGH_COLLECTION_COMMANDS
     )
     if extras and not passthrough:
         parser.error(f"unrecognized arguments: {' '.join(extras)}")
 
     if args.command == "tools":
-        if args.tool == "checklist":
-            if args.checklist_command == "review":
-                from lode.tools.checklist.web import server as checklist_server
-                checklist_server.main()
-                return
-            from lode.tools.checklist import process_checklist, scaffold_source, sync_checklist
+        if args.tool == "home":
+            from lode.tools.home.web import server as home_server
+            home_server.main()
+        elif args.tool == "collection":
+            from lode.tools.collection import process_checklist, scaffold_source, sync_checklist
             script = {
                 "sync": sync_checklist.main,
                 "process": process_checklist.main,
                 "scaffold": scaffold_source.main,
-            }[args.checklist_command]
+            }[args.collection_command]
             script(extras)
-        elif args.tool == "column-mapping":
-            from lode.tools.column_mapping.web import server as column_mapping_server
-            column_mapping_server.main()
-        elif args.tool == "classification":
-            from lode.tools.classification.web import server as classification_server
-            classification_server.main()
 
     elif args.command == "pipeline":
         from lode.pipeline import run as pipeline_run

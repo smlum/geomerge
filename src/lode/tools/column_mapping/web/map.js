@@ -7,14 +7,15 @@ let reminderTargets = [];
 async function load() {
   document.getElementById("title").textContent = sourceId;
 
-  const res = await fetch(`/api/column_map/${encodeURIComponent(sourceId)}`);
+  const res = await fetch(`api/column_map/${encodeURIComponent(sourceId)}`);
   const data = await res.json();
   if (!res.ok) {
     document.getElementById("rows-body").innerHTML = `<tr><td colspan="6" class="error">${escapeHtml(data.error)}</td></tr>`;
     return;
   }
 
-  document.getElementById("raw-path").textContent = `data/raw/${sourceId}/${data.raw_filename} (${data.format})`;
+  document.getElementById("raw-path").textContent = `reading: data/raw/${sourceId}/${data.raw_filename} (${data.format})`;
+  document.getElementById("output-path").textContent = `writing: sources/${sourceId}/column_map.yaml`;
   targets = data.targets;
   reminderTargets = data.reminder_targets;
 
@@ -144,7 +145,7 @@ async function save(destination) {
   }
   const widthUnit = document.getElementById("width-unit").value.trim();
 
-  const res = await fetch(`/api/column_map/${encodeURIComponent(sourceId)}`, {
+  const res = await fetch(`api/column_map/${encodeURIComponent(sourceId)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ assignments, width_unit: widthUnit }),
@@ -156,21 +157,20 @@ async function save(destination) {
   }
 
   if (destination === "back") {
-    location.href = "index.html";
+    goHome();
     return;
   }
 
-  const nextSourceId = await findNextSource();
-  location.href = nextSourceId ? `map.html?id=${encodeURIComponent(nextSourceId)}` : "index.html";
-}
-
-async function findNextSource() {
-  const res = await fetch("/api/sources");
-  const sources = await res.json();
-  const next = sources.find(
-    (s) => s.source_id !== sourceId && s.has_data && s.has_metadata && s.column_map_status !== "complete"
+  const nextSourceId = await findNextSource(
+    sourceId,
+    "api/sources",
+    (s) => s.has_data && s.has_metadata && s.column_map_status !== "complete"
   );
-  return next ? next.source_id : null;
+  if (nextSourceId) {
+    location.href = `map.html?id=${encodeURIComponent(nextSourceId)}`;
+  } else {
+    goHome();
+  }
 }
 
 function escapeHtml(s) {

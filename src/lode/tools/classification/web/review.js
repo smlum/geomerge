@@ -31,7 +31,7 @@ function embedUrl(p) {
 }
 
 async function fetchSamplePoints(target, values, fresh) {
-  const res = await fetch(`/api/sample_points/${encodeURIComponent(sourceId)}`, {
+  const res = await fetch(`api/sample_points/${encodeURIComponent(sourceId)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ target, values, fresh }),
@@ -253,7 +253,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
     const value = notIncludedCheckbox.checked ? notIncludedValue : field.value.trim();
     if (!value) return;
     const method = !notIncludedCheckbox.checked && value === initialValue && initialMethod === "rule" ? "rule" : "manual";
-    const res = await fetch(`/api/classification/${encodeURIComponent(sourceId)}`, {
+    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target, values: group.values, target_value: value, method }),
@@ -332,12 +332,18 @@ function renderTargetSection(target, targetData) {
   return section;
 }
 
+function isIncomplete(s) {
+  return s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
+}
+
 async function load() {
   document.getElementById("title").textContent = sourceId;
+  document.getElementById("input-path").textContent = `reading: data/preprocessing/${sourceId}/${sourceId}.parquet`;
+  document.getElementById("output-path").textContent = `writing: sources/${sourceId}/classification_map.yaml`;
 
   const [configRes, dataRes] = await Promise.all([
-    fetch("/api/config"),
-    fetch(`/api/classification/${encodeURIComponent(sourceId)}`),
+    fetch("api/config"),
+    fetch(`api/classification/${encodeURIComponent(sourceId)}`),
   ]);
   appConfig = await configRes.json();
   const data = await dataRes.json();
@@ -361,5 +367,19 @@ async function load() {
     container.appendChild(renderTargetSection(target, targetData));
   }
 }
+
+// Every row already auto-saves itself on its own "Save" click — there's
+// nothing pending to flush here, so this is just "go to the next source
+// that still needs work" rather than a save step (unlike column-mapping,
+// which batches a whole form and genuinely saves on this click).
+document.getElementById("save-next-btn").addEventListener("click", async () => {
+  const nextSourceId = await findNextSource(sourceId, "api/sources", isIncomplete);
+  if (nextSourceId) {
+    location.href = `review.html?id=${encodeURIComponent(nextSourceId)}`;
+  } else {
+    goHome();
+  }
+});
+document.getElementById("save-back-btn").addEventListener("click", goHome);
 
 load();

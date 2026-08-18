@@ -8,10 +8,12 @@
 <body>
   <header>
     <div class="title-block">
+      <div class="tool-label">Column mapping</div>
       <h1 id="title"></h1>
       <div id="raw-path" class="meta"></div>
+      <div id="output-path" class="meta"></div>
     </div>
-    <a href="index.html" class="back-link">&larr; All sources</a>
+    <a href="/" class="back-link">&larr; Home</a>
   </header>
   <div class="table-scroll">
     <table id="rows">
@@ -48,10 +50,11 @@
 
   <div class="save-row">
     <button id="save-next-btn">Save &amp; next</button>
-    <button id="save-back-btn">Save &amp; back to list</button>
+    <button id="save-back-btn">Save &amp; back to home</button>
     <span id="save-status" class="meta"></span>
   </div>
 
+  <script src="/nav.js"></script>
   <script src="map.js"></script>
 </body>
 </html>

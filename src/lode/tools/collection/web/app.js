@@ -4,7 +4,7 @@ let requiredFields = [];
 let formatOptions = [];
 
 async function loadMeta() {
-  const res = await fetch("/api/meta");
+  const res = await fetch("api/meta");
   const meta = await res.json();
   document.getElementById("checklist-path").textContent = meta.checklist_path;
   sourcesDir = meta.sources_dir;
@@ -13,7 +13,7 @@ async function loadMeta() {
 }
 
 async function loadRows() {
-  const res = await fetch("/api/rows");
+  const res = await fetch("api/rows");
   rows = await res.json();
   render();
 }
@@ -249,7 +249,7 @@ async function openModal(sourceId, checklistNotes) {
   document.getElementById("modal-path").textContent = `${sourcesDir}/${sourceId}/metadata.yaml`;
   document.getElementById("modal-save-status").textContent = "";
 
-  const res = await fetch(`/api/source/${encodeURIComponent(sourceId)}`);
+  const res = await fetch(`api/source/${encodeURIComponent(sourceId)}`);
   const data = await res.json();
   // The checklist's own notes column is the source of truth for notes — it
   // propagates in here (and gets saved back into the yaml), not the other
@@ -353,7 +353,7 @@ async function openModal(sourceId, checklistNotes) {
 
 async function detectRaw() {
   const statusEl = document.getElementById("modal-save-status");
-  const res = await fetch(`/api/detect_raw/${encodeURIComponent(modalSourceId)}`);
+  const res = await fetch(`api/detect_raw/${encodeURIComponent(modalSourceId)}`);
   const data = await res.json();
   if (!res.ok) {
     statusEl.textContent = data.error || "No file found";
@@ -432,5 +432,20 @@ filterSelect.addEventListener("change", () => {
   render();
 });
 
-loadMeta();
-loadRows();
+// Deep link from lode tools home's Metadata column (?id=<source_id>) — jumps
+// straight into that source's metadata modal instead of landing on the full
+// checklist and making you go find the row yourself.
+async function openFromQueryParam() {
+  const sourceId = new URLSearchParams(location.search).get("id");
+  if (!sourceId) return;
+  const row = rows.find((r) => r.source_ids === sourceId);
+  if (row) await openMetadata(row);
+}
+
+async function bootstrap() {
+  await loadMeta();
+  await loadRows();
+  await openFromQueryParam();
+}
+
+bootstrap();

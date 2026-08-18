@@ -8,15 +8,24 @@
 <body>
   <header>
     <div class="title-block">
+      <div class="tool-label">Classification</div>
       <h1 id="title"></h1>
+      <div id="input-path" class="meta"></div>
+      <div id="output-path" class="meta"></div>
       <div id="subtitle" class="meta"></div>
     </div>
-    <a href="index.html" class="back-link">&larr; All sources</a>
+    <a href="/" class="back-link">&larr; Home</a>
   </header>
 
   <div id="error" class="error hidden"></div>
   <div id="targets"></div>
 
+  <div class="save-row">
+    <button id="save-next-btn">Next source &rarr;</button>
+    <button id="save-back-btn">&larr; Back to home</button>
+  </div>
+
+  <script src="/nav.js"></script>
   <script src="review.js"></script>
 </body>
 </html>

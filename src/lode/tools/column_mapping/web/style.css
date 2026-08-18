@@ -10,6 +10,15 @@ body {
   box-sizing: border-box;
 }
 
+.tool-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #999;
+  margin-bottom: 0.15rem;
+}
+
 header {
   display: flex;
   align-items: baseline;
