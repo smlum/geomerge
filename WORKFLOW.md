@@ -20,8 +20,9 @@ A broad overview of the workflow is:
 
 ## 1. Data collection
 
-Providers live in `providers-directory/providers.csv`. Checklist + per-source files live in
-`sources/` (`checklist.csv`, `<source_id>/metadata.yaml`); the tools that manage them are in
+Providers live wherever `lode.config.yaml`'s `providers_csv` points (this project:
+`ca-data-providers/providers.csv`). Checklist + per-source files live in `sources/`
+(`checklist.csv`, `<source_id>/metadata.yaml`); the tools that manage them are in
 `src/lode/tools/checklist/`.
 
 **Workflow**

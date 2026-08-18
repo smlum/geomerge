@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from lode.helpers.paths import find_repo_root
+from lode.helpers.config import load_config
 
 
 def update_checklist(checklist_csv: Path, provider_id: str, source_id: str, source_url: str):
@@ -49,14 +49,15 @@ def update_checklist(checklist_csv: Path, provider_id: str, source_id: str, sour
 
 
 def main(argv=None):
-    repo_root = find_repo_root()
+    config = load_config()
+    repo_root = config["repo_root"]
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--provider-id", required=True)
     parser.add_argument("--slug", required=True, help="Short dataset label, e.g. cycling, mup")
     parser.add_argument("--source-url", default="", help="Dataset page URL, prefilled into the yaml and checklist")
-    parser.add_argument("--providers-csv", type=Path, default=repo_root / "providers-directory" / "providers.csv")
-    parser.add_argument("--checklist-csv", type=Path, default=repo_root / "sources" / "checklist.csv")
-    parser.add_argument("--sources-dir", type=Path, default=repo_root / "sources")
+    parser.add_argument("--providers-csv", type=Path, default=repo_root / config["providers_csv"])
+    parser.add_argument("--checklist-csv", type=Path, default=repo_root / config["sources_dir"] / "checklist.csv")
+    parser.add_argument("--sources-dir", type=Path, default=repo_root / config["sources_dir"])
     args = parser.parse_args(argv)
 
     providers = pd.read_csv(args.providers_csv, dtype=str).fillna("")

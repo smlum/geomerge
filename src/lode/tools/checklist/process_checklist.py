@@ -18,13 +18,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from lode.helpers.paths import find_repo_root
+from lode.helpers.config import load_config
 
 
 def main(argv=None):
-    repo_root = find_repo_root()
+    config = load_config()
+    repo_root = config["repo_root"]
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--checklist-csv", type=Path, default=repo_root / "sources" / "checklist.csv")
+    parser.add_argument("--checklist-csv", type=Path, default=repo_root / config["sources_dir"] / "checklist.csv")
     args = parser.parse_args(argv)
 
     if not args.checklist_csv.exists():

@@ -17,14 +17,15 @@ import pandas as pd
 import yaml
 from flask import Flask, jsonify, request, send_from_directory
 
-from lode.helpers.paths import find_repo_root
+from lode.helpers.config import load_config
 
-REPO_ROOT = find_repo_root()
-CHECKLIST_CSV = REPO_ROOT / "sources" / "checklist.csv"
-PROVIDERS_CSV = REPO_ROOT / "providers-directory" / "providers.csv"
-SOURCES_DIR = REPO_ROOT / "sources"
-SCHEMA_YAML = REPO_ROOT / "schema" / "sources.yaml"
-RAW_DIR = REPO_ROOT / "data" / "raw"
+CONFIG = load_config()
+REPO_ROOT = CONFIG["repo_root"]
+SOURCES_DIR = REPO_ROOT / CONFIG["sources_dir"]
+CHECKLIST_CSV = SOURCES_DIR / "checklist.csv"
+PROVIDERS_CSV = REPO_ROOT / CONFIG["providers_csv"]
+SCHEMA_YAML = REPO_ROOT / CONFIG["sources_schema"]
+RAW_DIR = REPO_ROOT / CONFIG["raw_dir"]
 
 EDITABLE_FIELDS = [
     "dataset_page_url", "download_url", "format", "license_name", "license_url",
