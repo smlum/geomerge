@@ -4,6 +4,7 @@ pipeline/ (mechanical processing driven by those decisions).
 
     lode tools checklist sync|review|process|scaffold [-- script args]
     lode tools column-mapping
+    lode tools classification
     lode pipeline run [--stage NAME] [--source ID]
     lode pipeline <stage-name> [--source ID]   # sugar for 'run --stage <stage-name>'
 """
@@ -42,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     checklist_sub.add_parser("scaffold", help="Manually scaffold metadata.yaml for one provider+slug")
 
     tools_sub.add_parser("column-mapping", help="Web UI for mapping raw columns onto the target schema")
+    tools_sub.add_parser("classification", help="Web UI for classifying raw values onto the target schema")
 
     pipeline_parser = subparsers.add_parser("pipeline", help="Mechanical, no-human-in-the-loop data processing")
     pipeline_sub = pipeline_parser.add_subparsers(dest="pipeline_command", required=True)
@@ -91,6 +93,9 @@ def main(argv=None):
         elif args.tool == "column-mapping":
             from lode.tools.column_mapping.web import server as column_mapping_server
             column_mapping_server.main()
+        elif args.tool == "classification":
+            from lode.tools.classification.web import server as classification_server
+            classification_server.main()
 
     elif args.command == "pipeline":
         from lode.pipeline import run as pipeline_run

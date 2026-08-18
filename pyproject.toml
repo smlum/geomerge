@@ -12,6 +12,7 @@ dependencies = [
     "pyarrow",
     "pandas",
     "flask",
+    "python-dotenv",
 ]
 
 [project.scripts]
@@ -27,3 +28,4 @@ where = ["src"]
 [tool.setuptools.package-data]
 "lode.tools.column_mapping.web" = ["*.html", "*.js", "*.css"]
 "lode.tools.checklist.web" = ["*.html", "*.js", "*.css"]
+"lode.tools.classification.web" = ["*.html", "*.js", "*.css"]

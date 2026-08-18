@@ -16,3 +16,13 @@ def load_config(start: Path = None) -> dict:
     config = yaml.safe_load(config_path.read_text())
     config["repo_root"] = repo_root
     return config
+
+
+def stage_output_dir(config: dict, stage_name: str) -> Path:
+    """A pipeline stage's output_dir, resolved against repo_root — for tools
+    that need to read a stage's output without hardcoding its path (e.g. it
+    changed once already, when preprocessing was split out from processing)."""
+    for stage in config["pipeline"]["stages"]:
+        if stage["name"] == stage_name:
+            return config["repo_root"] / stage["output_dir"]
+    raise ValueError(f"no pipeline stage named '{stage_name}' in lode.config.yaml")
