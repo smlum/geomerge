@@ -16,10 +16,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import geopandas as gpd
+import pandas as pd
 import yaml
 
 from lode.helpers.config import load_config
 from lode.helpers.readers import read_source_file
+
+# Sentinel work unit for a `merge: true` stage — such a stage runs its steps
+# once, over every source's data combined, instead of once per source.
+MERGED_UNIT = "_merged"
 
 
 def list_source_ids(config: dict) -> list:
@@ -40,27 +46,60 @@ def resolve_step(ref: str):
     return getattr(module, func_name)
 
 
-def load_stage_input(stage_index: int, source_id: str, config: dict):
+def stage_work_units(stage: dict, source_ids: list) -> list:
+    """A normal stage runs its steps once per source. A `merge: true` stage
+    runs them once, over every source's data combined — it has exactly one
+    unit of work, not one per source."""
+    if stage.get("merge"):
+        return [MERGED_UNIT]
+    return source_ids
+
+
+def load_stage_input(stage_index: int, unit_id: str, config: dict):
     repo_root = config["repo_root"]
-    sources_dir = repo_root / config["sources_dir"]
     stages = config["pipeline"]["stages"]
+    stage = stages[stage_index]
 
     if stage_index == 0:
-        metadata = load_yaml(sources_dir / source_id / "metadata.yaml")
+        sources_dir = repo_root / config["sources_dir"]
+        metadata = load_yaml(sources_dir / unit_id / "metadata.yaml")
         raw_filename = metadata.get("raw_filename")
         fmt = metadata.get("format")
         if not raw_filename or not fmt:
             raise ValueError("metadata.yaml is missing raw_filename and/or format")
-        raw_path = repo_root / config["raw_dir"] / source_id / raw_filename
+        raw_path = repo_root / config["raw_dir"] / unit_id / raw_filename
         if not raw_path.exists():
             raise FileNotFoundError(f"raw file not found: {raw_path}")
         return read_source_file(raw_path, fmt)
 
-    prev_output_dir = repo_root / stages[stage_index - 1]["output_dir"]
-    input_path = prev_output_dir / source_id / f"{source_id}.parquet"
+    prev_stage = stages[stage_index - 1]
+    input_dir = repo_root / stage.get("input_dir", prev_stage["output_dir"])
+
+    # Files at a stage boundary are always ones this pipeline wrote itself,
+    # with one unambiguous "geometry" column already typed correctly — unlike
+    # raw source files (see helpers/readers.py), so gpd.read_parquet is safe
+    # here and saves every downstream step from re-deriving geometry from WKB.
+    if prev_stage.get("merge"):
+        # The previous stage collapsed every source into one file — there's
+        # no per-source data left to select from, merged or not.
+        input_path = input_dir / prev_stage.get("output_filename", f"{prev_stage['name']}.parquet")
+        if not input_path.exists():
+            raise FileNotFoundError(f"expected {input_path} — did the '{prev_stage['name']}' stage run?")
+        return gpd.read_parquet(input_path)
+
+    if unit_id == MERGED_UNIT:
+        frames = []
+        for source_id in list_source_ids(config):
+            source_path = input_dir / source_id / f"{source_id}.parquet"
+            if not source_path.exists():
+                raise FileNotFoundError(f"expected {source_path} — did the previous stage run for this source?")
+            frames.append(gpd.read_parquet(source_path))
+        return gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=frames[0].crs)
+
+    input_path = input_dir / unit_id / f"{unit_id}.parquet"
     if not input_path.exists():
         raise FileNotFoundError(f"expected {input_path} — did the previous stage run for this source?")
-    return read_source_file(input_path, "parquet")
+    return gpd.read_parquet(input_path)
 
 
 def format_entry(entry: dict) -> str:
@@ -79,22 +118,25 @@ def run_stage(stage: dict, stage_index: int, source_ids: list, config: dict) -> 
     steps = [(ref, resolve_step(ref)) for ref in stage.get("steps", [])]
 
     log_entries = []
-    for source_id in source_ids:
+    for unit_id in stage_work_units(stage, source_ids):
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "stage": stage["name"],
-            "source_id": source_id,
+            "source_id": unit_id,
         }
         try:
-            data = load_stage_input(stage_index, source_id, config)
+            data = load_stage_input(stage_index, unit_id, config)
             rows_before = len(data)
 
             step_logs = []
             for ref, step in steps:
-                data, step_log = step(data, source_id=source_id, config=config)
+                data, step_log = step(data, source_id=unit_id, config=config)
                 step_logs.append({"step": ref, **(step_log or {})})
 
-            out_path = output_dir / source_id / f"{source_id}.parquet"
+            if unit_id == MERGED_UNIT:
+                out_path = output_dir / stage.get("output_filename", f"{stage['name']}.parquet")
+            else:
+                out_path = output_dir / unit_id / f"{unit_id}.parquet"
             out_path.parent.mkdir(parents=True, exist_ok=True)
             data.to_parquet(out_path)
 
@@ -142,6 +184,14 @@ def main(argv=None):
     if args.stage and args.stage not in stage_names:
         sys.exit(f"No such stage: {args.stage} (known: {', '.join(stage_names)})")
     stages_to_run = [s for s in stages if not args.stage or s["name"] == args.stage]
+
+    merge_stage = next((s for s in stages_to_run if s.get("merge")), None)
+    if args.source and merge_stage:
+        sys.exit(
+            f"--source can't be combined with the '{merge_stage['name']}' stage — "
+            "merge stages always operate over every source's output."
+        )
+
     source_ids = [args.source] if args.source else list_source_ids(config)
 
     all_log_entries = []
