@@ -26,7 +26,7 @@ from lode.helpers.config import load_config
 from lode.pipeline.status import preprocessing_status, processing_status
 from lode.tools.classification.status import source_status as classification_status
 from lode.tools.classification.web.server import create_blueprint as create_classification_blueprint
-from lode.tools.collection.status import checklist_summary, source_metadata_status
+from lode.tools.collection.status import checklist_summary, source_metadata_status, source_raw_data_status
 from lode.tools.collection.web.server import create_blueprint as create_collection_blueprint
 from lode.tools.column_mapping.status import source_status as column_mapping_status
 from lode.tools.column_mapping.web.server import create_blueprint as create_column_mapping_blueprint
@@ -80,13 +80,16 @@ def create_app(config: dict = None) -> Flask:
                     "classification": classification_overall,
                 },
                 # pipeline/ — mechanical processing driven by those decisions;
-                # no review UI, just "has it run, is it stale". Validation is
-                # a placeholder — no automated-check step exists yet
-                # (lode.config.yaml's "validate" stage is still commented
-                # out) — "not_built" rather than "not_started" so it doesn't
-                # read as "you have work to do" when the real answer is
-                # "there's nothing here yet".
+                # no review UI, just "has it run, is it stale". raw is here
+                # rather than in tools/ for the same reason: there's no tool
+                # to click into, just a badge for whether the file showed up
+                # on disk. Validation is a placeholder — no automated-check
+                # step exists yet (lode.config.yaml's "validate" stage is
+                # still commented out) — "not_built" rather than
+                # "not_started" so it doesn't read as "you have work to do"
+                # when the real answer is "there's nothing here yet".
                 "pipeline": {
+                    "raw": source_raw_data_status(source_id, config),
                     "preprocessing": preprocessing_status(source_id, config),
                     "processing": processing_status(source_id, config),
                     "validation": "not_built",

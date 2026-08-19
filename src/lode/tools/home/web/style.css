@@ -27,6 +27,14 @@ h1 {
   color: #888;
 }
 
+a.meta {
+  text-decoration: none;
+}
+
+a.meta:hover {
+  text-decoration: underline;
+}
+
 .table-scroll {
   overflow-x: auto;
 }

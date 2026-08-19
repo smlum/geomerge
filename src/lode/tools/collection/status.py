@@ -26,6 +26,23 @@ def source_metadata_status(source_id: str, config: dict) -> str:
     return "complete" if all(str(data.get(f, "")).strip() for f in required) else "partial"
 
 
+def source_raw_data_status(source_id: str, config: dict) -> str:
+    """missing | complete — is metadata.yaml's declared raw_filename actually
+    present under data/raw/<source_id>/? metadata.yaml only records the
+    filename a source is supposed to have; it says nothing about whether
+    anyone has actually downloaded the file, so this checks disk directly."""
+    repo_root = config["repo_root"]
+    yaml_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
+    if not yaml_path.exists():
+        return "missing"
+    data = yaml.safe_load(yaml_path.read_text()) or {}
+    raw_filename = data.get("raw_filename")
+    if not raw_filename:
+        return "missing"
+    raw_path = repo_root / config["raw_dir"] / source_id / raw_filename
+    return "complete" if raw_path.exists() else "missing"
+
+
 def checklist_summary(config: dict) -> dict:
     """Provider-level counts (not per-source): how much of providers.csv has
     been worked through, and how many were found."""

@@ -40,7 +40,8 @@ function renderRow(s) {
   tr.appendChild(linkedCell(s.tools.classification, `classification/review.html?id=${encodeURIComponent(s.source_id)}`));
 
   // pipeline/ — mechanical, no review UI to link into yet.
-  tr.appendChild(plainCell(s.pipeline.preprocessing, true));
+  tr.appendChild(plainCell(s.pipeline.raw, true));
+  tr.appendChild(plainCell(s.pipeline.preprocessing));
   tr.appendChild(plainCell(s.pipeline.processing));
   tr.appendChild(plainCell(s.pipeline.validation));
 
