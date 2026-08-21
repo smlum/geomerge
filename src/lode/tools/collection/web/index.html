@@ -23,6 +23,7 @@
       </select>
     </label>
     <div id="progress"></div>
+    <button id="add-source-btn" type="button">+ Add source</button>
     <a href="/" class="back-link">&larr; Home</a>
   </header>
   <div class="table-scroll">
@@ -66,6 +67,21 @@
       <div class="modal-actions">
         <button id="modal-save">Save</button>
         <span id="modal-save-status" class="meta"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="add-source-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="add-source-title">Add source</h2>
+        <button id="add-source-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <form id="add-source-form" class="edit-form"></form>
+      <div id="add-source-error" class="error hidden"></div>
+      <div class="modal-actions">
+        <button id="add-source-save">Add</button>
+        <span id="add-source-save-status" class="meta"></span>
       </div>
     </div>
   </div>

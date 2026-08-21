@@ -2,6 +2,8 @@ let rows = [];
 let sourcesDir = "";
 let requiredFields = [];
 let formatOptions = [];
+let geographyLevelOptions = [];
+let providerFieldDescriptions = {};
 
 async function loadMeta() {
   const res = await fetch("api/meta");
@@ -10,6 +12,8 @@ async function loadMeta() {
   sourcesDir = meta.sources_dir;
   requiredFields = meta.required_fields;
   formatOptions = meta.format_options;
+  geographyLevelOptions = meta.geography_level_options;
+  providerFieldDescriptions = meta.provider_field_descriptions;
 }
 
 async function loadRows() {
@@ -87,7 +91,17 @@ function renderRow(row) {
   tr.className = rowClass(row);
 
   const nameTd = document.createElement("td");
-  nameTd.innerHTML = `<div class="name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div class="meta">${row.province} · ${row.geography_level}</div>`;
+  const nameBtn = document.createElement("button");
+  nameBtn.type = "button";
+  nameBtn.className = "name-link";
+  nameBtn.title = `${row.name} — click to edit`;
+  nameBtn.textContent = row.name;
+  nameBtn.onclick = () => openAddSourceModal(row);
+  nameTd.appendChild(nameBtn);
+  const nameMeta = document.createElement("div");
+  nameMeta.className = "meta";
+  nameMeta.textContent = `${row.province} · ${row.geography_level}`;
+  nameTd.appendChild(nameMeta);
   tr.appendChild(nameTd);
 
   // Editable, not just a link — providers.csv's snapshot of a portal URL
@@ -540,6 +554,203 @@ document.getElementById("metadata-modal").addEventListener("click", (e) => {
 document.getElementById("modal-save").addEventListener("click", (e) => {
   e.preventDefault();
   saveModal();
+});
+
+// --- Add source modal ----------------------------------------------------
+// Adds a new row straight to checklist.csv only — not providers.csv (the
+// master registry these came from originally). Reconciling the two is a
+// separate problem for later; this just unblocks tracking a source that
+// isn't in the checklist yet.
+
+// Matches the real provider_id convention already in checklist.csv (e.g.
+// "City of Calgary" + AB -> ab_calgary): strip the generic civic prefix,
+// slugify what's left, prefix with the lowercased province code.
+const NAME_PREFIXES = [
+  "regional municipality of", "district municipality of", "municipality of",
+  "government of", "city of", "town of", "county of", "region of",
+  "district of", "township of", "village of",
+];
+
+function stripNamePrefix(name) {
+  const lower = name.toLowerCase();
+  for (const prefix of NAME_PREFIXES) {
+    if (lower.startsWith(prefix + " ")) return name.slice(prefix.length + 1);
+  }
+  return name;
+}
+
+const COMBINING_MARKS = new RegExp("[\\u0300-\\u036f]", "g");
+
+function slugify(text) {
+  return text
+    .normalize("NFD").replace(COMBINING_MARKS, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function generateProviderId(name, province) {
+  const slug = slugify(stripNamePrefix(name));
+  const code = province.toLowerCase().trim();
+  return code ? `${code}_${slug}` : slug;
+}
+
+const PROVINCE_OPTIONS = [
+  ["AB", "Alberta"], ["BC", "British Columbia"], ["MB", "Manitoba"],
+  ["NB", "New Brunswick"], ["NL", "Newfoundland and Labrador"], ["NS", "Nova Scotia"],
+  ["NT", "Northwest Territories"], ["NU", "Nunavut"], ["ON", "Ontario"],
+  ["PE", "Prince Edward Island"], ["QC", "Quebec"], ["SK", "Saskatchewan"], ["YT", "Yukon"],
+];
+
+// Name first (so there's something to generate an id from), then id itself
+// with a Generate button next to it — still freely editable either way.
+// geography_level/province are real dropdowns rather than free text so
+// what's typed always matches what providers.csv actually accepts.
+const ADD_SOURCE_FIELDS = [
+  { key: "name", label: "name", required: true },
+  { key: "province", label: "province", type: "select", options: () => PROVINCE_OPTIONS },
+  { key: "provider_id", label: "provider_id", required: true, genId: true },
+  { key: "geography_level", label: "geography_level", required: true, type: "select", options: () => geographyLevelOptions },
+  { key: "portal_url", label: "portal_url" },
+  { key: "portal_license_name", label: "portal_license_name" },
+  { key: "portal_license_url", label: "portal_license_url" },
+  { key: "contact", label: "contact" },
+  { key: "notes", label: "notes" },
+];
+
+// editRow is undefined when adding, or an existing row (from `rows`) when
+// editing that row in place — same form either way, just pre-filled, with
+// provider_id locked (it's a stable key set only once, at creation) and
+// posting to update_row instead of add_row.
+let editingRowIndex = null;
+
+function openAddSourceModal(editRow) {
+  editingRowIndex = editRow ? editRow.row_index : null;
+  document.getElementById("add-source-title").textContent = editRow ? "Edit source" : "Add source";
+  document.getElementById("add-source-save").textContent = editRow ? "Save" : "Add";
+  document.getElementById("add-source-error").classList.add("hidden");
+  document.getElementById("add-source-save-status").textContent = "";
+
+  const form = document.getElementById("add-source-form");
+  form.innerHTML = "";
+  const inputs = {};
+
+  for (const field of ADD_SOURCE_FIELDS) {
+    const label = document.createElement("label");
+    label.textContent = field.label + (field.required ? " *" : "");
+    const description = providerFieldDescriptions[field.key];
+    if (description) label.title = description;
+
+    const row = document.createElement("div");
+    row.className = "field-row";
+
+    let input;
+    if (field.type === "select") {
+      input = document.createElement("select");
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = "— choose —";
+      input.appendChild(blank);
+      for (const opt of field.options()) {
+        const [value, text] = Array.isArray(opt) ? opt : [opt, opt];
+        const optionEl = document.createElement("option");
+        optionEl.value = value;
+        optionEl.textContent = text;
+        input.appendChild(optionEl);
+      }
+    } else {
+      input = document.createElement("input");
+      input.type = "text";
+    }
+    input.id = `add-source-field-${field.key}`;
+    input.value = editRow ? (editRow[field.key] || "") : "";
+    if (field.key === "provider_id" && editRow) {
+      input.disabled = true;
+      input.title = "provider_id is set once at creation and can't be changed here.";
+    }
+    inputs[field.key] = input;
+
+    const markRequired = () => {
+      if (field.required) input.classList.toggle("required-empty", !input.value);
+    };
+    markRequired();
+    input.addEventListener("input", markRequired);
+    input.addEventListener("change", markRequired);
+
+    row.appendChild(input);
+
+    if (field.genId && !editRow) {
+      const genBtn = document.createElement("button");
+      genBtn.type = "button";
+      genBtn.className = "detect-btn";
+      genBtn.textContent = "Generate";
+      genBtn.title = "Fill in from name + province, e.g. \"City of Calgary\" + AB -> ab_calgary";
+      genBtn.onclick = () => {
+        const name = inputs.name.value.trim();
+        if (!name) return;
+        input.value = generateProviderId(name, inputs.province.value);
+        input.dispatchEvent(new Event("input"));
+        checkIdCollision(input);
+      };
+      row.appendChild(genBtn);
+    }
+
+    label.appendChild(row);
+
+    if (field.genId && !editRow) {
+      const warning = document.createElement("div");
+      warning.className = "error hidden";
+      warning.id = "add-source-id-warning";
+      label.appendChild(warning);
+      input.addEventListener("input", () => checkIdCollision(input));
+    }
+
+    form.appendChild(label);
+  }
+
+  document.getElementById("add-source-modal").classList.remove("hidden");
+}
+
+function checkIdCollision(idInput) {
+  const warning = document.getElementById("add-source-id-warning");
+  const id = idInput.value.trim();
+  const exists = id && rows.some((r) => r.provider_id === id);
+  warning.textContent = exists ? `"${id}" already exists in the checklist` : "";
+  warning.classList.toggle("hidden", !exists);
+}
+
+function closeAddSourceModal() {
+  document.getElementById("add-source-modal").classList.add("hidden");
+}
+
+async function saveAddSource() {
+  const values = {};
+  for (const field of ADD_SOURCE_FIELDS) {
+    values[field.key] = document.getElementById(`add-source-field-${field.key}`).value.trim();
+  }
+
+  const editing = editingRowIndex !== null;
+  if (editing) values.row_index = editingRowIndex;
+
+  const errorEl = document.getElementById("add-source-error");
+  const res = await postJson(editing ? "api/update_row" : "api/add_row", values);
+  if (!res.ok) {
+    errorEl.textContent = res.error || (editing ? "Failed to save" : "Failed to add source");
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  await loadRows();
+  closeAddSourceModal();
+}
+
+document.getElementById("add-source-btn").addEventListener("click", openAddSourceModal);
+document.getElementById("add-source-close").addEventListener("click", closeAddSourceModal);
+document.getElementById("add-source-modal").addEventListener("click", (e) => {
+  if (e.target.id === "add-source-modal") closeAddSourceModal();
+});
+document.getElementById("add-source-save").addEventListener("click", (e) => {
+  e.preventDefault();
+  saveAddSource();
 });
 
 async function postJson(url, body) {

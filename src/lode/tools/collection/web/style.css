@@ -145,11 +145,25 @@ tr.done.pending-metadata a {
   color: #ad8626;
 }
 
-.name {
+.name-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
   font-weight: 600;
+  color: inherit;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.name-link:hover {
+  text-decoration: underline;
+  background: none;
 }
 
 .meta {
@@ -294,6 +308,10 @@ button.not-found.confirmed:hover {
   font-size: 0.78rem;
   white-space: normal;
   margin-top: 0.2rem;
+}
+
+.error.hidden {
+  display: none;
 }
 
 .status {

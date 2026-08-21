@@ -23,6 +23,14 @@ EDITABLE_FIELDS = [
     "data_dictionary_url", "raw_filename", "notes",
 ]
 
+# checklist.csv row fields editable via Add/Edit source — provider_id and
+# name are handled separately (provider_id is a stable key set only on
+# creation; name is required so it's always sent, but neither is "optional"
+# in the way these are).
+EDITABLE_ROW_FIELDS = [
+    "province", "portal_url", "portal_license_name", "portal_license_url", "contact", "notes",
+]
+
 # Best-effort guess only — surfaced via a manual "Detect" button, never applied
 # automatically, since a stray old download or an unzipped shapefile bundle
 # can easily fool a most-recently-modified-file heuristic.
@@ -43,6 +51,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     sources_dir = repo_root / config["sources_dir"]
     checklist_csv = sources_dir / "checklist.csv"
     providers_csv = repo_root / config["providers_csv"]
+    providers_schema_yaml = repo_root / config["providers_schema"]
     schema_yaml = repo_root / config["sources_schema"]
     raw_dir = repo_root / config["raw_dir"]
 
@@ -65,6 +74,23 @@ def create_blueprint(config: dict = None) -> Blueprint:
             if f["name"] == "format":
                 return f.get("enum", [])
         return []
+
+    def geography_level_options() -> list:
+        # Sourced from the shared providers schema (ca-data-providers), not
+        # hardcoded here, so a new checklist row's geography_level always
+        # matches what that master registry actually accepts.
+        schema = yaml.safe_load(providers_schema_yaml.read_text())
+        for f in schema["fields"]:
+            if f["name"] == "geography_level":
+                return f.get("enum", [])
+        return []
+
+    def provider_field_descriptions() -> dict:
+        # Powers the Add source modal's field tooltips, straight from the
+        # same schema, so the hint text can't drift from what the master
+        # registry actually expects.
+        schema = yaml.safe_load(providers_schema_yaml.read_text())
+        return {f["name"]: f.get("description", "") for f in schema["fields"]}
 
     def yaml_path_for(source_id: str) -> Path:
         return sources_dir / source_id / "metadata.yaml"
@@ -118,6 +144,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "sources_dir": str(sources_dir.relative_to(repo_root)),
             "required_fields": required_fields(),
             "format_options": format_options(),
+            "geography_level_options": geography_level_options(),
+            "provider_field_descriptions": provider_field_descriptions(),
         })
 
     @bp.route("/api/rows")
@@ -126,6 +154,56 @@ def create_blueprint(config: dict = None) -> Blueprint:
         df["metadata_status"] = df.apply(metadata_status, axis=1)
         df["raw_data_status"] = df.apply(raw_data_status, axis=1)
         return jsonify(df.to_dict(orient="records"))
+
+    @bp.route("/api/add_row", methods=["POST"])
+    def api_add_row():
+        # Adds directly to this project's working checklist only — doesn't
+        # touch ca-data-providers/providers.csv (the master registry).
+        # Reconciling the two is a separate, later problem; for now this
+        # just needs to unblock adding a source that isn't in the checklist
+        # yet, e.g. one providers.csv missed.
+        data = request.get_json()
+        provider_id = (data.get("provider_id") or "").strip()
+        name = (data.get("name") or "").strip()
+        geography_level = (data.get("geography_level") or "").strip()
+
+        if not provider_id or not name or not geography_level:
+            return jsonify({"error": "provider_id, name, and geography_level are required"}), 400
+
+        df = load_checklist()
+        if (df["provider_id"] == provider_id).any():
+            return jsonify({"error": f"provider_id '{provider_id}' already exists in the checklist"}), 400
+
+        new_row = {col: "" for col in df.columns}
+        new_row.update({"provider_id": provider_id, "name": name, "geography_level": geography_level})
+        new_row.update({f: (data.get(f) or "").strip() for f in EDITABLE_ROW_FIELDS})
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        save_checklist(df)
+        return jsonify({"ok": True, "row_index": len(df) - 1})
+
+    @bp.route("/api/update_row", methods=["POST"])
+    def api_update_row():
+        # provider_id is never touched here — it's the stable key everything
+        # else (source_ids, any future providers.csv sync) keys off, so it's
+        # only ever set once, at creation.
+        data = request.get_json()
+        row_index = int(data["row_index"])
+        name = (data.get("name") or "").strip()
+        geography_level = (data.get("geography_level") or "").strip()
+
+        if not name or not geography_level:
+            return jsonify({"error": "name and geography_level are required"}), 400
+
+        df = load_checklist()
+        if row_index not in df.index:
+            return jsonify({"error": "row not found"}), 404
+
+        df.at[row_index, "name"] = name
+        df.at[row_index, "geography_level"] = geography_level
+        for field in EDITABLE_ROW_FIELDS:
+            df.at[row_index, field] = (data.get(field) or "").strip()
+        save_checklist(df)
+        return jsonify({"ok": True})
 
     @bp.route("/api/found", methods=["POST"])
     def api_found():
