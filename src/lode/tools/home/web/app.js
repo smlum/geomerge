@@ -26,6 +26,37 @@ function plainCell(status, boundary) {
   return td;
 }
 
+// Pipeline stages (preprocessing/processing) have no review UI, but unlike
+// raw/validation they do have a real CLI command that fixes them — so when
+// there's something to fix (stale or never built), the badge copies that
+// command to the clipboard instead of just sitting there as a status.
+function pipelineCell(status, sourceId, stage, boundary) {
+  const td = document.createElement("td");
+  if (boundary) td.classList.add("group-boundary");
+  const badge = statusBadge(status);
+  if (status === "stale" || status === "not_built") {
+    const command = `lode pipeline ${stage} --source ${sourceId}`;
+    badge.classList.add("copyable");
+    badge.title = "Click to copy command";
+    badge.addEventListener("click", () => copyCommand(badge, command));
+  }
+  td.appendChild(badge);
+  return td;
+}
+
+async function copyCommand(badge, command) {
+  try {
+    await navigator.clipboard.writeText(command);
+  } catch (e) {
+    return;
+  }
+  const original = badge.textContent;
+  badge.textContent = "copied!";
+  setTimeout(() => {
+    badge.textContent = original;
+  }, 1000);
+}
+
 function renderRow(s) {
   const tr = document.createElement("tr");
 
@@ -41,8 +72,8 @@ function renderRow(s) {
 
   // pipeline/ — mechanical, no review UI to link into yet.
   tr.appendChild(plainCell(s.pipeline.raw, true));
-  tr.appendChild(plainCell(s.pipeline.preprocessing));
-  tr.appendChild(plainCell(s.pipeline.processing));
+  tr.appendChild(pipelineCell(s.pipeline.preprocessing, s.source_id, "preprocessing"));
+  tr.appendChild(pipelineCell(s.pipeline.processing, s.source_id, "processing"));
   tr.appendChild(plainCell(s.pipeline.validation));
 
   return tr;
@@ -62,5 +93,7 @@ async function load() {
     body.appendChild(renderRow(s));
   }
 }
+
+document.getElementById("refresh-btn").addEventListener("click", load);
 
 load();

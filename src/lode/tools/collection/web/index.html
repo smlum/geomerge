@@ -8,28 +8,34 @@
 <body>
   <header>
     <div class="title-block">
+      <div class="tool-label">Collection</div>
       <h1>Data source checklist</h1>
       <div id="checklist-path" class="meta"></div>
     </div>
-    <div id="progress"></div>
     <label class="toggle">
       Show:
       <select id="filter-mode">
-        <option value="all">All</option>
-        <option value="unchecked" selected>Unchecked</option>
-        <option value="metadata_incomplete">Metadata incomplete</option>
-        <option value="metadata_complete">Completed</option>
+        <option value="all" selected>All</option>
+        <option value="not_found">Not found</option>
+        <option value="metadata_incomplete">Incomplete</option>
+        <option value="metadata_complete">Complete</option>
+        <option value="flagged">Flagged</option>
       </select>
     </label>
+    <div id="progress"></div>
+    <a href="/" class="back-link">&larr; Home</a>
   </header>
+  <div class="table-scroll">
   <table id="rows">
     <colgroup>
       <col style="width: 210px" />
       <col style="width: 140px" />
-      <col style="width: 195px" />
+      <col style="width: 150px" />
       <col style="width: 260px" />
-      <col style="width: 160px" />
-      <col />
+      <col style="width: 95px" />
+      <col style="width: 145px" />
+      <col style="width: 55px" />
+      <col style="width: 220px" />
     </colgroup>
     <thead>
       <tr>
@@ -37,12 +43,15 @@
         <th>Portal</th>
         <th>Actions</th>
         <th>Source URL</th>
+        <th>Raw data</th>
         <th>Metadata</th>
+        <th>Flag</th>
         <th>Notes</th>
       </tr>
     </thead>
     <tbody id="rows-body"></tbody>
   </table>
+  </div>
 
   <div id="metadata-modal" class="modal-overlay hidden">
     <div class="modal-panel">

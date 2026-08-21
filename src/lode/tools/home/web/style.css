@@ -70,6 +70,26 @@ th {
   color: #999;
 }
 
+.refresh-btn {
+  margin-left: 0.3rem;
+  padding: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  line-height: 1;
+  font-size: 0.85rem;
+  border: none;
+  background: none;
+  color: #999;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: middle;
+}
+
+.refresh-btn:hover {
+  color: #555;
+}
+
 /* Divides the tools/ group (human-reviewed, each with its own web UI) from
    the pipeline/ group (mechanical, no review UI) — a deliberate distinction
    in how the project's built, not just a visual one. */
@@ -133,4 +153,12 @@ td a {
   background: #f2f2f2;
   color: #bbb;
   font-style: italic;
+}
+
+.status.copyable {
+  cursor: pointer;
+}
+
+.status.copyable:hover {
+  filter: brightness(0.92);
 }

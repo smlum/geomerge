@@ -25,7 +25,12 @@ def present_columns(df, target: str, targets_config: dict) -> list:
 
 
 def unique_combos(df, columns: list) -> list:
-    """[{"values": {col: str, ...}, "count": n}, ...], sorted by count desc."""
+    """[{"values": {col: str, ...}, "count": n}, ...], grouped by the first
+    source column (e.g. source_class) so rows that only differ by a
+    secondary column stay adjacent. Groups are ordered by their combined
+    count (the source_class with the most rows overall comes first, before
+    it's split by any secondary column), and rows within a group are
+    ordered by their own count desc."""
     if not columns:
         return []
     stringified = df[columns].apply(lambda col: col.map(stringify))
@@ -34,7 +39,11 @@ def unique_combos(df, columns: list) -> list:
         {"values": {c: row[c] for c in columns}, "count": int(row["count"])}
         for _, row in counted.iterrows()
     ]
-    combos.sort(key=lambda c: -c["count"])
+    group_totals = {}
+    for combo in combos:
+        key = combo["values"][columns[0]]
+        group_totals[key] = group_totals.get(key, 0) + combo["count"]
+    combos.sort(key=lambda c: (-group_totals[c["values"][columns[0]]], -c["count"]))
     return combos
 
 

@@ -6,7 +6,7 @@ let formatOptions = [];
 async function loadMeta() {
   const res = await fetch("api/meta");
   const meta = await res.json();
-  document.getElementById("checklist-path").textContent = meta.checklist_path;
+  document.getElementById("checklist-path").textContent = `editing: ${meta.checklist_path}`;
   sourcesDir = meta.sources_dir;
   requiredFields = meta.required_fields;
   formatOptions = meta.format_options;
@@ -24,6 +24,17 @@ function isDone(row) {
   return Boolean(row.checked_date) || Boolean(row.checked);
 }
 
+// Reviewed and confirmed no usable source exists — distinct from a row
+// that just hasn't been looked at yet (that one's neither found nor
+// "not found", it's still pending).
+function isNotFound(row) {
+  return isDone(row) && !row.source_url;
+}
+
+function isMetadataComplete(row) {
+  return row.metadata_status === "complete";
+}
+
 function progressText(filterMode) {
   if (filterMode === "metadata_incomplete" || filterMode === "metadata_complete") {
     const sourcesTotal = rows.filter((r) => r.metadata_status !== "none").length;
@@ -31,7 +42,8 @@ function progressText(filterMode) {
     return `${completeCount} / ${sourcesTotal} sources with metadata complete`;
   }
   const doneCount = rows.filter(isDone).length;
-  return `${doneCount} / ${rows.length} checked`;
+  const foundCount = rows.filter((r) => r.source_url).length;
+  return `${doneCount} / ${rows.length} checked  ·  <span class="found-count">${foundCount} found</span>`;
 }
 
 function render() {
@@ -39,16 +51,24 @@ function render() {
   const body = document.getElementById("rows-body");
   body.innerHTML = "";
 
+  // Not found / Incomplete / Complete partition "All" exhaustively — every
+  // row is exactly one of the three, so Incomplete is everything that
+  // isn't already decided one way or the other, not just "has some
+  // metadata but not all of it."
   let visible = rows;
-  if (filterMode === "unchecked") {
-    visible = rows.filter((r) => !isDone(r));
+  if (filterMode === "not_found") {
+    visible = rows.filter(isNotFound);
   } else if (filterMode === "metadata_incomplete") {
-    visible = rows.filter((r) => r.metadata_status === "missing" || r.metadata_status === "partial");
+    visible = rows.filter((r) => !isNotFound(r) && !isMetadataComplete(r));
   } else if (filterMode === "metadata_complete") {
-    visible = rows.filter((r) => r.metadata_status === "complete");
+    visible = rows.filter(isMetadataComplete);
+  } else if (filterMode === "flagged") {
+    // Cuts across the other three — a flagged row can be in any state,
+    // this is just "needs my attention" regardless of where it stands.
+    visible = rows.filter((r) => r.flagged);
   }
 
-  document.getElementById("progress").textContent = progressText(filterMode);
+  document.getElementById("progress").innerHTML = progressText(filterMode);
 
   for (const row of visible) {
     body.appendChild(renderRow(row));
@@ -56,9 +76,10 @@ function render() {
 }
 
 function rowClass(row) {
-  if (!isDone(row)) return "";
-  if (!row.source_url) return "done not-found-row";
-  return row.metadata_status === "complete" ? "done" : "done pending-metadata";
+  const flagClass = row.flagged ? " flagged-row" : "";
+  if (!isDone(row)) return "" + flagClass;
+  if (!row.source_url) return "done not-found-row" + flagClass;
+  return (row.metadata_status === "complete" ? "done" : "done pending-metadata") + flagClass;
 }
 
 function renderRow(row) {
@@ -69,12 +90,33 @@ function renderRow(row) {
   nameTd.innerHTML = `<div class="name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div class="meta">${row.province} · ${row.geography_level}</div>`;
   tr.appendChild(nameTd);
 
+  // Editable, not just a link — providers.csv's snapshot of a portal URL
+  // sometimes turns out to be wrong or stale, so this needs to be fixable
+  // right here rather than requiring an edit somewhere else entirely.
   const portalTd = document.createElement("td");
-  if (row.portal_url) {
-    portalTd.innerHTML = `<a class="portal-link" href="${escapeHtml(row.portal_url)}" target="_blank" rel="noopener">${escapeHtml(truncateUrl(row.portal_url, 24))}</a>`;
-  } else {
-    portalTd.innerHTML = `<span class="meta">no portal known</span>`;
-  }
+  const portalWrapper = document.createElement("div");
+  portalWrapper.className = "url-cell";
+
+  const portalOpenLink = document.createElement("a");
+  portalOpenLink.className = "open-link" + (row.portal_url ? "" : " disabled");
+  portalOpenLink.href = row.portal_url || "#";
+  portalOpenLink.target = "_blank";
+  portalOpenLink.rel = "noopener";
+  portalOpenLink.textContent = "Open";
+  portalWrapper.appendChild(portalOpenLink);
+
+  const portalInput = document.createElement("input");
+  portalInput.type = "text";
+  portalInput.placeholder = "portal URL";
+  portalInput.value = row.portal_url || "";
+  portalInput.addEventListener("input", () => {
+    portalOpenLink.href = portalInput.value || "#";
+    portalOpenLink.classList.toggle("disabled", !portalInput.value);
+  });
+  portalInput.addEventListener("change", () => savePortalUrl(row.row_index, portalInput.value.trim()));
+  portalWrapper.appendChild(portalInput);
+
+  portalTd.appendChild(portalWrapper);
   tr.appendChild(portalTd);
 
   const actionsTd = document.createElement("td");
@@ -82,13 +124,13 @@ function renderRow(row) {
   const foundBtn = document.createElement("button");
   foundBtn.className = "found" + (isDone(row) && row.source_url ? " confirmed" : "");
   foundBtn.textContent = "Found";
-  foundBtn.onclick = () => submitFound(row);
+  foundBtn.onclick = () => submitFound(row, foundBtn);
   actionsTd.appendChild(foundBtn);
 
   const notFoundBtn = document.createElement("button");
   notFoundBtn.className = "not-found" + (isDone(row) && !row.source_url ? " confirmed" : "");
   notFoundBtn.textContent = "Not found";
-  notFoundBtn.onclick = () => submitNotFound(row);
+  notFoundBtn.onclick = () => submitNotFound(row, notFoundBtn);
   actionsTd.appendChild(notFoundBtn);
 
   const errorDiv = document.createElement("div");
@@ -107,34 +149,55 @@ function renderRow(row) {
   const urlWrapper = document.createElement("div");
   urlWrapper.className = "url-cell";
 
-  if (confirmedNotFound && !displayUrl) {
-    urlWrapper.innerHTML = `<span class="meta">marked not found</span>`;
-  } else {
-    if (displayUrl) {
-      const openLink = document.createElement("a");
-      openLink.className = "open-link";
-      openLink.href = displayUrl;
-      openLink.target = "_blank";
-      openLink.rel = "noopener";
-      openLink.textContent = "Open";
-      urlWrapper.appendChild(openLink);
-    }
-    if (confirmedNotFound) {
-      urlWrapper.appendChild(Object.assign(document.createElement("span"), {
-        className: "meta",
-        textContent: "marked not found",
-      }));
-    } else {
-      const input = document.createElement("input");
-      input.type = "text";
-      input.placeholder = "paste dataset URL";
-      input.id = `input-${row.row_index}`;
-      input.value = displayUrl;
-      urlWrapper.appendChild(input);
-    }
+  // Open always present, and always follows whatever's currently in the
+  // input — not a fixed snapshot of displayUrl — same live-binding pattern
+  // as the metadata modal's own url fields below.
+  const openLink = document.createElement("a");
+  openLink.className = "open-link" + (displayUrl ? "" : " disabled");
+  openLink.href = displayUrl || "#";
+  openLink.target = "_blank";
+  openLink.rel = "noopener";
+  openLink.textContent = "Open";
+  urlWrapper.appendChild(openLink);
+
+  // Always editable, even once marked "not found" — that's exactly the case
+  // where a prior lead (e.g. a CCND import) turned out to be dead and needs
+  // replacing with the real URL, so the box can't just disappear on you.
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "paste dataset URL";
+  input.id = `input-${row.row_index}`;
+  input.value = displayUrl;
+  input.addEventListener("input", () => {
+    openLink.href = input.value || "#";
+    openLink.classList.toggle("disabled", !input.value);
+  });
+  urlWrapper.appendChild(input);
+
+  if (confirmedNotFound) {
+    urlWrapper.appendChild(Object.assign(document.createElement("span"), {
+      className: "meta",
+      textContent: "not found",
+    }));
   }
+
   urlTd.appendChild(urlWrapper);
   tr.appendChild(urlTd);
+
+  // No action button here — the actual download stays a manual step (find
+  // the file, drop it under data/raw/<source_id>/); this just flags whether
+  // that's happened yet, same as the Metadata column's "none" convention for
+  // rows not found yet.
+  const rawTd = document.createElement("td");
+  if (row.raw_data_status === "none") {
+    rawTd.innerHTML = `<span class="meta">—</span>`;
+  } else {
+    const badge = document.createElement("span");
+    badge.className = `status status-${row.raw_data_status}`;
+    badge.textContent = row.raw_data_status;
+    rawTd.appendChild(badge);
+  }
+  tr.appendChild(rawTd);
 
   const metaTd = document.createElement("td");
   if (row.metadata_status === "none") {
@@ -155,12 +218,32 @@ function renderRow(row) {
   }
   tr.appendChild(metaTd);
 
+  // Flag is just "does this need my attention" — the note in the next
+  // column over is where the actual reason/action lives (e.g. "email
+  // their contact").
+  const flagTd = document.createElement("td");
+  flagTd.className = "flag-cell";
+  const flagCheckbox = document.createElement("input");
+  flagCheckbox.type = "checkbox";
+  flagCheckbox.checked = Boolean(row.flagged);
+  flagCheckbox.title = "Flag as needing action";
+  flagCheckbox.addEventListener("change", () => toggleFlag(row, tr, flagCheckbox));
+  flagTd.appendChild(flagCheckbox);
+  tr.appendChild(flagTd);
+
   const notesTd = document.createElement("td");
-  const notesInput = document.createElement("input");
-  notesInput.type = "text";
+
+  const notesInput = document.createElement("textarea");
+  notesInput.rows = 1;
   notesInput.className = "notes-input";
   notesInput.placeholder = "notes";
   notesInput.value = row.notes || "";
+  notesInput.addEventListener("focus", () => growNotes(notesInput));
+  notesInput.addEventListener("input", () => growNotes(notesInput));
+  notesInput.addEventListener("blur", () => {
+    notesInput.classList.remove("expanded");
+    notesInput.style.height = "";
+  });
   notesInput.addEventListener("change", () => saveNote(row.row_index, notesInput.value));
   notesTd.appendChild(notesInput);
   tr.appendChild(notesTd);
@@ -168,45 +251,76 @@ function renderRow(row) {
   return tr;
 }
 
+function growNotes(el) {
+  el.classList.add("expanded");
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 async function saveNote(rowIndex, notes) {
-  const res = await postJson("/api/note", { row_index: rowIndex, notes });
+  const res = await postJson("api/note", { row_index: rowIndex, notes });
   if (res.ok) {
     const row = rows.find((r) => r.row_index === rowIndex);
     if (row) row.notes = notes;
   }
 }
 
-async function submitFound(row) {
+async function savePortalUrl(rowIndex, portalUrl) {
+  const res = await postJson("api/portal_url", { row_index: rowIndex, portal_url: portalUrl });
+  if (res.ok) {
+    const row = rows.find((r) => r.row_index === rowIndex);
+    if (row) row.portal_url = portalUrl;
+  }
+}
+
+async function toggleFlag(row, tr, checkbox) {
+  const flagged = checkbox.checked;
+  const res = await postJson("api/flag", { row_index: row.row_index, flagged });
+  if (!res.ok) {
+    checkbox.checked = !flagged;
+    return;
+  }
+  row.flagged = flagged ? "x" : "";
+  tr.classList.toggle("flagged-row", flagged);
+}
+
+// Both flash the button's "confirmed" look before reloading — the reload
+// often drops the row out of view entirely (e.g. the default "Unchecked"
+// filter no longer matches it), so without a flash first, a successful
+// click and a no-op would look identical.
+async function submitFound(row, btn) {
   const input = document.getElementById(`input-${row.row_index}`);
   const errorDiv = document.getElementById(`error-${row.row_index}`);
   errorDiv.textContent = "";
 
-  // Rows already confirmed "not found" don't render an input box (nothing to
-  // edit) — fall back to a prompt if someone reconsiders and finds something.
-  const sourceUrl = (input ? input.value : prompt("Paste dataset URL:", row.prior_url || "") || "").trim();
+  const sourceUrl = input.value.trim();
 
   if (!sourceUrl) {
     errorDiv.textContent = "Paste a URL first.";
     return;
   }
 
-  const res = await postJson("/api/found", { row_index: row.row_index, source_url: sourceUrl });
+  const res = await postJson("api/found", { row_index: row.row_index, source_url: sourceUrl });
   if (!res.ok) {
     errorDiv.textContent = res.error || "Failed";
     return;
   }
-  await loadRows();
+  btn.classList.add("confirmed");
+  btn.textContent = "Found ✓";
+  setTimeout(loadRows, 700);
 }
 
-async function submitNotFound(row) {
+async function submitNotFound(row, btn) {
   const input = document.getElementById(`input-${row.row_index}`);
   const notes = input.value.trim();
-  const res = await postJson("/api/not_found", { row_index: row.row_index, notes });
+  const res = await postJson("api/not_found", { row_index: row.row_index, notes });
   if (!res.ok) {
     document.getElementById(`error-${row.row_index}`).textContent = res.error || "Failed";
     return;
   }
-  await loadRows();
+  btn.classList.add("confirmed");
+  btn.textContent = "Not found ✓";
+  setTimeout(loadRows, 700);
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -232,7 +346,7 @@ let fieldValidators = {};
 async function openMetadata(row) {
   let sourceId = row.source_ids;
   if (row.metadata_status === "missing") {
-    const res = await postJson("/api/generate", { row_index: row.row_index });
+    const res = await postJson("api/generate", { row_index: row.row_index });
     if (!res.ok) {
       document.getElementById(`error-${row.row_index}`).textContent = res.error || "Failed to generate";
       return;
@@ -344,6 +458,32 @@ async function openModal(sourceId, checklistNotes) {
       row.appendChild(sameAsBtn);
     }
 
+    // Lives on license_url's row rather than as its own field — it's the
+    // one binary fact that matters most for any data release, so it stays
+    // right next to the license itself instead of scrolling past it.
+    if (field.key === "license_url") {
+      const checkboxLabel = document.createElement("label");
+      checkboxLabel.className = "inline-checkbox";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = "modal-field-open_license";
+      // Respect an explicit saved value either way; only auto-follow the
+      // URL field (live, as it's typed) when it's never been reviewed —
+      // and stop following the moment the user touches the checkbox
+      // themselves, so a manual choice never gets silently overwritten.
+      let openLicenseTouched = data.open_license !== null;
+      checkbox.checked = data.open_license === true || (!openLicenseTouched && Boolean(input.value));
+      checkbox.addEventListener("change", () => {
+        openLicenseTouched = true;
+      });
+      input.addEventListener("input", () => {
+        if (!openLicenseTouched) checkbox.checked = Boolean(input.value);
+      });
+      checkboxLabel.appendChild(checkbox);
+      checkboxLabel.append(" Open license");
+      row.appendChild(checkboxLabel);
+    }
+
     label.appendChild(row);
     form.appendChild(label);
   }
@@ -383,7 +523,8 @@ async function saveModal() {
   for (const field of METADATA_FIELDS) {
     updates[field.key] = document.getElementById(`modal-field-${field.key}`).value;
   }
-  const res = await postJson(`/api/source/${encodeURIComponent(modalSourceId)}`, updates);
+  updates.open_license = document.getElementById("modal-field-open_license").checked;
+  const res = await postJson(`api/source/${encodeURIComponent(modalSourceId)}`, updates);
   if (!res.ok) {
     document.getElementById("modal-save-status").textContent = "Failed to save";
     return;
@@ -418,11 +559,6 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-function truncateUrl(url, maxLen = 40) {
-  const stripped = url.replace(/^https?:\/\//, "");
-  return stripped.length <= maxLen ? stripped : stripped.slice(0, maxLen - 1) + "…";
-}
-
 const filterSelect = document.getElementById("filter-mode");
 const savedFilter = localStorage.getItem("checklist-filter-mode");
 if (savedFilter) filterSelect.value = savedFilter;
@@ -442,10 +578,20 @@ async function openFromQueryParam() {
   if (row) await openMetadata(row);
 }
 
+// Table header sticks right below the page header rather than at the very
+// top — measured rather than hardcoded, since the header's height depends
+// on its (dynamically loaded) content and can reflow on resize.
+function updateHeaderOffset() {
+  const header = document.querySelector("header");
+  document.documentElement.style.setProperty("--header-height", `${header.offsetHeight}px`);
+}
+window.addEventListener("resize", updateHeaderOffset);
+
 async function bootstrap() {
   await loadMeta();
   await loadRows();
   await openFromQueryParam();
+  updateHeaderOffset();
 }
 
 bootstrap();

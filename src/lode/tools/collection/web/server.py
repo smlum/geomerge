@@ -19,8 +19,8 @@ from lode.helpers.config import load_config
 
 EDITABLE_FIELDS = [
     "dataset_page_url", "download_url", "format", "license_name", "license_url",
-    "contact", "source_updated_date", "retrieved_date", "data_dictionary_url",
-    "raw_filename", "notes",
+    "open_license", "contact", "source_updated_date", "retrieved_date",
+    "data_dictionary_url", "raw_filename", "notes",
 ]
 
 # Best-effort guess only — surfaced via a manual "Detect" button, never applied
@@ -90,6 +90,23 @@ def create_blueprint(config: dict = None) -> Blueprint:
         req = required_fields()
         return "complete" if all(str(data.get(f, "")).strip() for f in req) else "partial"
 
+    def raw_data_status(row) -> str:
+        """missing | complete | none (none = no confirmed source_url yet) — is
+        the raw_filename metadata.yaml declares actually sitting under
+        data/raw/<source_id>/? Declaring the filename doesn't mean it's been
+        downloaded yet, so this checks disk directly."""
+        if not row["source_url"]:
+            return "none"
+        source_id = row["source_ids"]
+        yaml_path = yaml_path_for(source_id) if source_id else None
+        if not (yaml_path and yaml_path.exists()):
+            return "missing"
+        data = yaml.safe_load(yaml_path.read_text()) or {}
+        raw_filename = data.get("raw_filename")
+        if not raw_filename:
+            return "missing"
+        return "complete" if (raw_dir / source_id / raw_filename).exists() else "missing"
+
     @bp.route("/")
     def index():
         return send_from_directory(bp.static_folder, "index.html")
@@ -107,6 +124,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def api_rows():
         df = load_checklist().reset_index().rename(columns={"index": "row_index"})
         df["metadata_status"] = df.apply(metadata_status, axis=1)
+        df["raw_data_status"] = df.apply(raw_data_status, axis=1)
         return jsonify(df.to_dict(orient="records"))
 
     @bp.route("/api/found", methods=["POST"])
@@ -175,6 +193,34 @@ def create_blueprint(config: dict = None) -> Blueprint:
         save_checklist(df)
         return jsonify({"ok": True})
 
+    @bp.route("/api/portal_url", methods=["POST"])
+    def api_portal_url():
+        data = request.get_json()
+        row_index = int(data["row_index"])
+        portal_url = (data.get("portal_url") or "").strip()
+
+        df = load_checklist()
+        if row_index not in df.index:
+            return jsonify({"error": "row not found"}), 404
+
+        df.at[row_index, "portal_url"] = portal_url
+        save_checklist(df)
+        return jsonify({"ok": True})
+
+    @bp.route("/api/flag", methods=["POST"])
+    def api_flag():
+        data = request.get_json()
+        row_index = int(data["row_index"])
+        flagged = bool(data.get("flagged"))
+
+        df = load_checklist()
+        if row_index not in df.index:
+            return jsonify({"error": "row not found"}), 404
+
+        df.at[row_index, "flagged"] = "x" if flagged else ""
+        save_checklist(df)
+        return jsonify({"ok": True})
+
     @bp.route("/api/generate", methods=["POST"])
     def api_generate():
         data = request.get_json()
@@ -204,6 +250,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "format": "",
             "license_name": provider_row["portal_license_name"] if provider_row is not None else "",
             "license_url": provider_row["portal_license_url"] if provider_row is not None else "",
+            "open_license": None,
             "contact": provider_row["contact"] if provider_row is not None else "",
             "source_updated_date": "",
             "retrieved_date": str(date.today()),
