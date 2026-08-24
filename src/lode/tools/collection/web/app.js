@@ -39,11 +39,17 @@ function isMetadataComplete(row) {
   return row.metadata_status === "complete";
 }
 
+// "Complete" means nothing left to do at all — metadata fields filled in AND
+// the raw file actually downloaded, not just one or the other.
+function isComplete(row) {
+  return isMetadataComplete(row) && row.raw_data_status === "complete";
+}
+
 function progressText(filterMode) {
   if (filterMode === "metadata_incomplete" || filterMode === "metadata_complete") {
     const sourcesTotal = rows.filter((r) => r.metadata_status !== "none").length;
-    const completeCount = rows.filter((r) => r.metadata_status === "complete").length;
-    return `${completeCount} / ${sourcesTotal} sources with metadata complete`;
+    const completeCount = rows.filter(isComplete).length;
+    return `${completeCount} / ${sourcesTotal} sources complete`;
   }
   const doneCount = rows.filter(isDone).length;
   const foundCount = rows.filter((r) => r.source_url).length;
@@ -63,9 +69,9 @@ function render() {
   if (filterMode === "not_found") {
     visible = rows.filter(isNotFound);
   } else if (filterMode === "metadata_incomplete") {
-    visible = rows.filter((r) => !isNotFound(r) && !isMetadataComplete(r));
+    visible = rows.filter((r) => !isNotFound(r) && !isComplete(r));
   } else if (filterMode === "metadata_complete") {
-    visible = rows.filter(isMetadataComplete);
+    visible = rows.filter(isComplete);
   } else if (filterMode === "flagged") {
     // Cuts across the other three — a flagged row can be in any state,
     // this is just "needs my attention" regardless of where it stands.
@@ -319,8 +325,9 @@ async function submitFound(row, btn) {
     errorDiv.textContent = res.error || "Failed";
     return;
   }
+  // Color flip is the confirmation, not a text change — appending a
+  // checkmark made the button grow and get clipped in this narrow column.
   btn.classList.add("confirmed");
-  btn.textContent = "Found ✓";
   setTimeout(loadRows, 700);
 }
 
@@ -333,7 +340,6 @@ async function submitNotFound(row, btn) {
     return;
   }
   btn.classList.add("confirmed");
-  btn.textContent = "Not found ✓";
   setTimeout(loadRows, 700);
 }
 
@@ -354,40 +360,212 @@ const METADATA_FIELDS = [
   { key: "notes" },
 ];
 
-let modalSourceId = null;
-let fieldValidators = {};
+// A provider can have more than one relevant dataset (e.g. bike lanes and a
+// separate multi-use-trails layer) — the modal shows one independent block
+// per source, all fields visible immediately (no separate "create" step),
+// plus a "+ Add another source" button that appends one more blank block.
+// Numbering ("Source 1"/"Source 2") and the per-block Remove button only
+// show once there's more than one — with just one, neither means anything.
+let modalRowIndex = null;
+let modalProviderId = null;
+let modalChecklistNotes = "";
+let modalNewSourceDefaults = {};
+let modalBlocks = []; // { uid, sourceId, block, heading, pathLine, removeBtn, labelInput }
+let blockUidCounter = 0;
+let fieldValidators = {}; // fieldValidators[uid][fieldKey] = markRequired fn
 
-async function openMetadata(row) {
-  let sourceId = row.source_ids;
-  if (row.metadata_status === "missing") {
-    const res = await postJson("api/generate", { row_index: row.row_index });
-    if (!res.ok) {
-      document.getElementById(`error-${row.row_index}`).textContent = res.error || "Failed to generate";
-      return;
-    }
-    sourceId = res.source_id;
-    await loadRows();
-  }
-  openModal(sourceId, row.notes);
+// What generate() will actually prefill a brand-new source with — mirrored
+// here so a not-yet-created block shows the same defaults immediately,
+// rather than appearing blank until Save.
+function newSourceDefaults(row) {
+  return {
+    dataset_page_url: row.source_url || "",
+    license_name: row.portal_license_name || "",
+    license_url: row.portal_license_url || "",
+    open_license: null, // never reviewed yet — must be null, not undefined, to match generate()'s default and keep the auto-follow-as-you-type checkbox behavior working
+    contact: row.contact || "",
+    retrieved_date: new Date().toISOString().slice(0, 10),
+  };
 }
 
-async function openModal(sourceId, checklistNotes) {
-  modalSourceId = sourceId;
-  document.getElementById("modal-title").textContent = sourceId;
-  document.getElementById("modal-path").textContent = `${sourcesDir}/${sourceId}/metadata.yaml`;
+async function openMetadata(row) {
+  modalRowIndex = row.row_index;
+  modalProviderId = row.provider_id;
+  modalChecklistNotes = row.notes || "";
+  modalNewSourceDefaults = newSourceDefaults(row);
+  fieldValidators = {};
+  modalBlocks = [];
+
+  document.getElementById("modal-title").textContent = row.name;
   document.getElementById("modal-save-status").textContent = "";
 
-  const res = await fetch(`api/source/${encodeURIComponent(sourceId)}`);
-  const data = await res.json();
+  const container = document.getElementById("metadata-blocks");
+  container.innerHTML = "";
+
+  const existingIds = (row.source_ids || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (existingIds.length === 0) {
+    addSourceBlock(null, { ...modalNewSourceDefaults });
+  } else {
+    for (const sourceId of existingIds) {
+      const res = await fetch(`api/source/${encodeURIComponent(sourceId)}`);
+      const data = await res.json();
+      addSourceBlock(sourceId, data);
+    }
+  }
+  refreshBlockChrome();
+
+  document.getElementById("metadata-modal").classList.remove("hidden");
+}
+
+function refreshBlockChrome() {
+  const multi = modalBlocks.length > 1;
+  modalBlocks.forEach((b, i) => {
+    b.heading.textContent = `Source ${i + 1}`;
+    b.heading.classList.toggle("hidden", !multi);
+    b.removeBtn.classList.toggle("hidden", !multi);
+  });
+}
+
+function addSourceBlock(sourceId, data) {
+  const uid = blockUidCounter++;
+  const container = document.getElementById("metadata-blocks");
+  const block = document.createElement("div");
+  block.className = "source-block";
+
+  const blockHeader = document.createElement("div");
+  blockHeader.className = "source-block-header";
+  const heading = document.createElement("h3");
+  heading.className = "hidden";
+  blockHeader.appendChild(heading);
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "remove-source-btn hidden";
+  removeBtn.textContent = "Remove";
+  blockHeader.appendChild(removeBtn);
+  block.appendChild(blockHeader);
+
+  const pathLine = document.createElement("div");
+  pathLine.className = "meta source-path";
+  block.appendChild(pathLine);
+
+  const blockState = { uid, sourceId, block, heading, pathLine, removeBtn, labelInput: null };
+  modalBlocks.push(blockState);
+  removeBtn.onclick = () => removeSourceBlock(blockState);
+
+  function updatePathPreview() {
+    if (blockState.sourceId) return; // locked once real — this stays static
+    const isFirst = modalBlocks[0] === blockState;
+    const label = blockState.labelInput.value.trim();
+    if (label) {
+      pathLine.textContent = `editing: ${sourcesDir}/${modalProviderId}_${slugify(label)}/metadata.yaml`;
+    } else if (isFirst) {
+      pathLine.textContent = `editing: ${sourcesDir}/${modalProviderId}_cycling/metadata.yaml`;
+    } else {
+      pathLine.textContent = "editing: (enter a label first)";
+    }
+  }
+
+  if (sourceId) {
+    pathLine.textContent = `editing: ${sourcesDir}/${sourceId}/metadata.yaml`;
+  }
+  // Uncommitted blocks get their initial preview set once labelInput exists,
+  // right after it's created below — updatePathPreview() reads its value.
+
   // The checklist's own notes column is the source of truth for notes — it
   // propagates in here (and gets saved back into the yaml), not the other
   // way around.
-  data.notes = checklistNotes || data.notes || "";
+  data.notes = modalChecklistNotes || data.notes || "";
 
-  const form = document.getElementById("metadata-form");
-  form.innerHTML = "";
-  fieldValidators = {};
+  const form = document.createElement("form");
+  form.className = "edit-form";
+  fieldValidators[uid] = {};
+
   for (const field of METADATA_FIELDS) {
+    // label lives right before raw_filename — optional for a provider's
+    // first source (still useful, e.g. "multi_use_trails"), required for
+    // any source after that (there has to be some way to tell them apart).
+    // Baked into source_id once created, so it's locked from then on.
+    if (field.key === "raw_filename") {
+      const isFirst = modalBlocks[0] === blockState;
+      const labelRequired = !sourceId && !isFirst;
+
+      const labelLabelEl = document.createElement("label");
+      labelLabelEl.textContent = "label" + (labelRequired ? " *" : "");
+      labelLabelEl.title = "Baked into this source's id once created — can't be changed afterward.";
+
+      const labelRow = document.createElement("div");
+      labelRow.className = "field-row";
+      const labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.placeholder = isFirst ? "optional, e.g. multi_use_trails" : "required, e.g. multi_use_trails";
+      labelInput.value = data.label || "";
+      labelInput.disabled = Boolean(sourceId);
+      labelInput.id = `modal-field-${uid}-label`;
+
+      const markLabelRequired = () => {
+        if (labelRequired) labelInput.classList.toggle("required-empty", !labelInput.value);
+      };
+      markLabelRequired();
+      fieldValidators[uid].label = markLabelRequired;
+      if (!sourceId) {
+        labelInput.addEventListener("input", () => {
+          markLabelRequired();
+          updatePathPreview();
+        });
+      }
+
+      labelRow.appendChild(labelInput);
+
+      // Locked by default (baked into source_id already) — but early on,
+      // before anything downstream depends on that exact id, a rename is
+      // still safe. Two clicks: first unlocks the field to edit, second
+      // actually renames the folder/yaml/checklist entry on disk.
+      if (sourceId) {
+        if (data._can_rename) {
+          const renameBtn = document.createElement("button");
+          renameBtn.type = "button";
+          renameBtn.className = "detect-btn";
+          renameBtn.textContent = "Rename";
+          renameBtn.onclick = async () => {
+            if (labelInput.disabled) {
+              labelInput.disabled = false;
+              labelInput.focus();
+              renameBtn.textContent = "Confirm rename";
+              return;
+            }
+            const newLabel = labelInput.value.trim();
+            const ok = confirm(
+              `Rename this source's id to match "${newLabel || "(default)"}"? This moves its folder on disk.`
+            );
+            if (!ok) return;
+            const res = await postJson("api/rename_source", {
+              row_index: modalRowIndex,
+              old_source_id: blockState.sourceId,
+              label: newLabel,
+            });
+            const statusEl = document.getElementById("modal-save-status");
+            if (!res.ok) {
+              statusEl.textContent = res.error || "Failed to rename";
+              return;
+            }
+            blockState.sourceId = res.source_id;
+            pathLine.textContent = `editing: ${sourcesDir}/${res.source_id}/metadata.yaml`;
+            labelInput.disabled = true;
+            renameBtn.textContent = "Rename";
+            await loadRows();
+          };
+          labelRow.appendChild(renameBtn);
+        } else {
+          labelInput.title = "Can't rename — later pipeline steps already reference this source.";
+        }
+      }
+
+      labelLabelEl.appendChild(labelRow);
+      form.appendChild(labelLabelEl);
+      blockState.labelInput = labelInput;
+      if (!sourceId) updatePathPreview();
+    }
+
     const required = requiredFields.includes(field.key);
 
     const label = document.createElement("label");
@@ -425,13 +603,13 @@ async function openModal(sourceId, checklistNotes) {
       input.type = "text";
       input.value = data[field.key] || "";
     }
-    input.id = `modal-field-${field.key}`;
+    input.id = `modal-field-${uid}-${field.key}`;
 
     const markRequired = () => {
       if (required) input.classList.toggle("required-empty", !input.value);
     };
     markRequired();
-    fieldValidators[field.key] = markRequired;
+    fieldValidators[uid][field.key] = markRequired;
     input.addEventListener("input", markRequired);
     input.addEventListener("change", markRequired);
 
@@ -456,7 +634,7 @@ async function openModal(sourceId, checklistNotes) {
       detectBtn.type = "button";
       detectBtn.className = "detect-btn";
       detectBtn.textContent = "Detect";
-      detectBtn.onclick = detectRaw;
+      detectBtn.onclick = () => detectRaw(blockState);
       row.appendChild(detectBtn);
     }
 
@@ -466,7 +644,7 @@ async function openModal(sourceId, checklistNotes) {
       sameAsBtn.className = "detect-btn";
       sameAsBtn.textContent = "Same as source";
       sameAsBtn.onclick = () => {
-        input.value = document.getElementById(`modal-field-${field.sameAs}`).value;
+        input.value = document.getElementById(`modal-field-${uid}-${field.sameAs}`).value;
         input.dispatchEvent(new Event("input"));
       };
       row.appendChild(sameAsBtn);
@@ -480,7 +658,7 @@ async function openModal(sourceId, checklistNotes) {
       checkboxLabel.className = "inline-checkbox";
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
-      checkbox.id = "modal-field-open_license";
+      checkbox.id = `modal-field-${uid}-open_license`;
       // Respect an explicit saved value either way; only auto-follow the
       // URL field (live, as it's typed) when it's never been reviewed —
       // and stop following the moment the user touches the checkbox
@@ -502,46 +680,100 @@ async function openModal(sourceId, checklistNotes) {
     form.appendChild(label);
   }
 
-  document.getElementById("metadata-modal").classList.remove("hidden");
+  block.appendChild(form);
+  container.appendChild(block);
 }
 
-async function detectRaw() {
+async function removeSourceBlock(blockState) {
   const statusEl = document.getElementById("modal-save-status");
-  const res = await fetch(`api/detect_raw/${encodeURIComponent(modalSourceId)}`);
+  if (blockState.sourceId) {
+    const ok = confirm(
+      `Remove ${blockState.sourceId}? This permanently deletes its metadata.yaml and any downloaded raw data.`
+    );
+    if (!ok) return;
+    const res = await postJson("api/remove_source", { row_index: modalRowIndex, source_id: blockState.sourceId });
+    if (!res.ok) {
+      statusEl.textContent = res.error || "Failed to remove";
+      return;
+    }
+  }
+  blockState.block.remove();
+  modalBlocks = modalBlocks.filter((b) => b !== blockState);
+  refreshBlockChrome();
+  if (blockState.sourceId) await loadRows();
+}
+
+async function detectRaw(blockState) {
+  const statusEl = document.getElementById("modal-save-status");
+
+  // Not saved yet, but its raw folder may already exist: "Found" pre-creates
+  // data/raw/<provider_id>_cycling/ for a provider's first source the moment
+  // a source_url is set, well before its metadata.yaml is ever generated —
+  // so this mirrors that same (label-or-default) id, same as updatePathPreview,
+  // rather than requiring a save first just to look inside an existing folder.
+  let sourceId = blockState.sourceId;
+  if (!sourceId) {
+    const isFirst = modalBlocks[0] === blockState;
+    const label = blockState.labelInput.value.trim();
+    if (label) {
+      sourceId = `${modalProviderId}_${slugify(label)}`;
+    } else if (isFirst) {
+      sourceId = `${modalProviderId}_cycling`;
+    } else {
+      statusEl.textContent = "Enter a label first so this source's folder can be identified.";
+      return;
+    }
+  }
+  const res = await fetch(`api/detect_raw/${encodeURIComponent(sourceId)}`);
   const data = await res.json();
   if (!res.ok) {
     statusEl.textContent = data.error || "No file found";
     return;
   }
 
-  const filenameInput = document.getElementById("modal-field-raw_filename");
+  const filenameInput = document.getElementById(`modal-field-${blockState.uid}-raw_filename`);
   filenameInput.value = data.raw_filename;
-  fieldValidators.raw_filename?.();
+  fieldValidators[blockState.uid]?.raw_filename?.();
 
   if (data.format) {
-    const formatInput = document.getElementById("modal-field-format");
+    const formatInput = document.getElementById(`modal-field-${blockState.uid}-format`);
     formatInput.value = data.format;
-    fieldValidators.format?.();
+    fieldValidators[blockState.uid]?.format?.();
   }
-
-  statusEl.textContent = `Detected: ${data.raw_filename}`;
 }
 
 function closeModal() {
   document.getElementById("metadata-modal").classList.add("hidden");
-  modalSourceId = null;
+  modalRowIndex = null;
+  modalProviderId = null;
+  modalBlocks = [];
 }
 
 async function saveModal() {
-  const updates = {};
-  for (const field of METADATA_FIELDS) {
-    updates[field.key] = document.getElementById(`modal-field-${field.key}`).value;
-  }
-  updates.open_license = document.getElementById("modal-field-open_license").checked;
-  const res = await postJson(`api/source/${encodeURIComponent(modalSourceId)}`, updates);
-  if (!res.ok) {
-    document.getElementById("modal-save-status").textContent = "Failed to save";
-    return;
+  const statusEl = document.getElementById("modal-save-status");
+  for (const blockState of modalBlocks) {
+    if (!blockState.sourceId) {
+      const label = blockState.labelInput.value.trim();
+      const res = await postJson("api/generate", { row_index: modalRowIndex, label });
+      if (!res.ok) {
+        statusEl.textContent = res.error || "Failed to create source";
+        return;
+      }
+      blockState.sourceId = res.source_id;
+      blockState.pathLine.textContent = `editing: ${sourcesDir}/${res.source_id}/metadata.yaml`;
+      blockState.labelInput.disabled = true;
+    }
+
+    const updates = {};
+    for (const field of METADATA_FIELDS) {
+      updates[field.key] = document.getElementById(`modal-field-${blockState.uid}-${field.key}`).value;
+    }
+    updates.open_license = document.getElementById(`modal-field-${blockState.uid}-open_license`).checked;
+    const res = await postJson(`api/source/${encodeURIComponent(blockState.sourceId)}`, updates);
+    if (!res.ok) {
+      statusEl.textContent = `Failed to save ${blockState.sourceId}`;
+      return;
+    }
   }
   await loadRows();
   closeModal();
@@ -554,6 +786,10 @@ document.getElementById("metadata-modal").addEventListener("click", (e) => {
 document.getElementById("modal-save").addEventListener("click", (e) => {
   e.preventDefault();
   saveModal();
+});
+document.getElementById("add-another-source-btn").addEventListener("click", () => {
+  addSourceBlock(null, { ...modalNewSourceDefaults });
+  refreshBlockChrome();
 });
 
 // --- Add source modal ----------------------------------------------------
@@ -626,7 +862,7 @@ let editingRowIndex = null;
 
 function openAddSourceModal(editRow) {
   editingRowIndex = editRow ? editRow.row_index : null;
-  document.getElementById("add-source-title").textContent = editRow ? "Edit source" : "Add source";
+  document.getElementById("add-source-title").textContent = editRow ? "Edit provider" : "Add provider";
   document.getElementById("add-source-save").textContent = editRow ? "Save" : "Add";
   document.getElementById("add-source-error").classList.add("hidden");
   document.getElementById("add-source-save-status").textContent = "";
@@ -743,7 +979,7 @@ async function saveAddSource() {
   closeAddSourceModal();
 }
 
-document.getElementById("add-source-btn").addEventListener("click", openAddSourceModal);
+document.getElementById("add-source-btn").addEventListener("click", () => openAddSourceModal());
 document.getElementById("add-source-close").addEventListener("click", closeAddSourceModal);
 document.getElementById("add-source-modal").addEventListener("click", (e) => {
   if (e.target.id === "add-source-modal") closeAddSourceModal();
@@ -785,7 +1021,7 @@ filterSelect.addEventListener("change", () => {
 async function openFromQueryParam() {
   const sourceId = new URLSearchParams(location.search).get("id");
   if (!sourceId) return;
-  const row = rows.find((r) => r.source_ids === sourceId);
+  const row = rows.find((r) => (r.source_ids || "").split(",").map((s) => s.trim()).includes(sourceId));
   if (row) await openMetadata(row);
 }
 

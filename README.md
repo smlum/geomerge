@@ -31,8 +31,8 @@ The package has a single CLI entrypoint, `lode`, which dispatches to tools (huma
 decisions) and the pipeline (mechanical processing driven by those decisions):
 
 ```bash
-lode tools checklist sync|review|process|scaffold
-lode tools column-mapping
+lode tools home                            # every tool's web UI, one process/port
+lode tools collection sync|process
 lode pipeline run [--stage NAME] [--source ID]
 lode pipeline <stage-name> [--source ID]   # sugar for 'run --stage <stage-name>'
 ```

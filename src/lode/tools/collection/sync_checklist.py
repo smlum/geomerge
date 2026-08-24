@@ -7,8 +7,10 @@ name/portal_url/geography_level/province are informational, refreshed from
 providers.csv on every run (edits to them here are overwritten — go fix
 providers.csv instead). prior_url/source_url/checked/checked_date/source_ids/
 notes are the actual working state and are preserved across runs, matched by
-provider_id — including when a provider has more than one row (duplicate a
-row by hand when a second dataset is found on the same portal).
+provider_id — one row per provider, always; a provider with more than one
+relevant dataset gets multiple source_ids (comma-separated) on that same
+row, not a duplicate row. See the collection web UI's metadata modal
+("+ Add another source") for creating those.
 
 prior_url (a lead from an earlier vintage, e.g. CCND) is permanent reference
 data — nothing in the checklist workflow ever clears it, unlike source_url

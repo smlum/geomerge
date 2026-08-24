@@ -8,6 +8,9 @@ sources/<source_id>/metadata.yaml is only ever generated on demand, via the
 Mounted under lode tools home at /collection/ — see lode.tools.home.web.server.
 """
 
+import re
+import shutil
+import unicodedata
 from datetime import date
 from pathlib import Path
 
@@ -15,7 +18,14 @@ import pandas as pd
 import yaml
 from flask import Blueprint, jsonify, request, send_from_directory
 
-from lode.helpers.config import load_config
+from lode.helpers.config import load_config, stage_output_dir
+
+
+def slugify(text: str) -> str:
+    normalized = unicodedata.normalize("NFD", text)
+    stripped = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]+", "_", stripped.lower()).strip("_")
+
 
 EDITABLE_FIELDS = [
     "dataset_page_url", "download_url", "format", "license_name", "license_url",
@@ -95,7 +105,16 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def yaml_path_for(source_id: str) -> Path:
         return sources_dir / source_id / "metadata.yaml"
 
-    def next_source_id(provider_id: str) -> str:
+    def source_ids_for(row) -> list:
+        return [s.strip() for s in (row["source_ids"] or "").split(",") if s.strip()]
+
+    def next_source_id(provider_id: str, label: str = "") -> str:
+        # A label (e.g. "multi_use_trails") bakes straight into the id —
+        # meaningful and stable, unlike the numeric fallback below, which
+        # only exists for providers with more than one source and no label
+        # given for the later ones.
+        if label:
+            return f"{provider_id}_{slugify(label)}"
         existing = {p.parent.name for p in sources_dir.glob(f"{provider_id}_*/metadata.yaml")}
         if f"{provider_id}_cycling" not in existing:
             return f"{provider_id}_cycling"
@@ -105,33 +124,50 @@ def create_blueprint(config: dict = None) -> Blueprint:
         return f"{provider_id}_cycling_{n}"
 
     def metadata_status(row) -> str:
-        """missing | partial | complete | none (none = no confirmed source_url yet)."""
+        """missing | partial | complete | none (none = no confirmed source_url
+        yet). A provider can have several sources; this is the worst of
+        them — complete only once every one of them is, missing if any
+        hasn't even been generated yet."""
         if not row["source_url"]:
             return "none"
-        source_id = row["source_ids"]
-        yaml_path = yaml_path_for(source_id) if source_id else None
-        if not (yaml_path and yaml_path.exists()):
+        source_ids = source_ids_for(row)
+        if not source_ids:
             return "missing"
-        data = yaml.safe_load(yaml_path.read_text()) or {}
         req = required_fields()
-        return "complete" if all(str(data.get(f, "")).strip() for f in req) else "partial"
+        statuses = []
+        for source_id in source_ids:
+            yaml_path = yaml_path_for(source_id)
+            if not yaml_path.exists():
+                statuses.append("missing")
+                continue
+            data = yaml.safe_load(yaml_path.read_text()) or {}
+            statuses.append("complete" if all(str(data.get(f, "")).strip() for f in req) else "partial")
+        if all(s == "complete" for s in statuses):
+            return "complete"
+        if any(s == "missing" for s in statuses):
+            return "missing"
+        return "partial"
 
     def raw_data_status(row) -> str:
-        """missing | complete | none (none = no confirmed source_url yet) — is
-        the raw_filename metadata.yaml declares actually sitting under
-        data/raw/<source_id>/? Declaring the filename doesn't mean it's been
-        downloaded yet, so this checks disk directly."""
+        """missing | complete | none (none = no confirmed source_url yet) —
+        is each source's declared raw_filename actually sitting under
+        data/raw/<source_id>/? complete only once every source's file is
+        there; declaring a filename doesn't mean it's been downloaded yet,
+        so this checks disk directly."""
         if not row["source_url"]:
             return "none"
-        source_id = row["source_ids"]
-        yaml_path = yaml_path_for(source_id) if source_id else None
-        if not (yaml_path and yaml_path.exists()):
+        source_ids = source_ids_for(row)
+        if not source_ids:
             return "missing"
-        data = yaml.safe_load(yaml_path.read_text()) or {}
-        raw_filename = data.get("raw_filename")
-        if not raw_filename:
-            return "missing"
-        return "complete" if (raw_dir / source_id / raw_filename).exists() else "missing"
+        for source_id in source_ids:
+            yaml_path = yaml_path_for(source_id)
+            if not yaml_path.exists():
+                return "missing"
+            data = yaml.safe_load(yaml_path.read_text()) or {}
+            raw_filename = data.get("raw_filename")
+            if not raw_filename or not (raw_dir / source_id / raw_filename).exists():
+                return "missing"
+        return "complete"
 
     @bp.route("/")
     def index():
@@ -224,11 +260,14 @@ def create_blueprint(config: dict = None) -> Blueprint:
         save_checklist(df)
 
         # Ready for the download as soon as there's somewhere to point it, well
-        # before anyone gets around to generating the yaml. Uses the same slug
-        # generate() would pick, so the two line up without needing source_ids
-        # set yet.
+        # before anyone gets around to generating the yaml. Uses the same
+        # (unlabeled) slug generate() would default to, so the two line up
+        # without needing source_ids set yet — only relevant for a
+        # provider's first source; later ones get their folder from
+        # generate() itself once a label's been chosen.
         provider_id = df.at[row_index, "provider_id"]
-        source_id = df.at[row_index, "source_ids"] or next_source_id(provider_id)
+        existing_ids = source_ids_for(df.loc[row_index])
+        source_id = existing_ids[0] if existing_ids else next_source_id(provider_id)
         (raw_dir / source_id).mkdir(parents=True, exist_ok=True)
 
         return jsonify({"checked_date": today})
@@ -301,35 +340,47 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/api/generate", methods=["POST"])
     def api_generate():
+        # Always creates one new source and appends it to this row's
+        # source_ids — a provider can have several, each with its own
+        # metadata.yaml. label is optional but permanent: it's baked into
+        # source_id right here and can't be changed afterward (same rule as
+        # provider_id elsewhere), so a collision has to be caught now.
         data = request.get_json()
         row_index = int(data["row_index"])
+        label = (data.get("label") or "").strip()
 
         df = load_checklist()
         if row_index not in df.index:
             return jsonify({"error": "row not found"}), 404
         row = df.loc[row_index]
 
-        # A stale source_ids (yaml deleted since) is reused rather than replaced,
-        # so re-generating doesn't orphan the id already recorded on the checklist.
-        source_id = row["source_ids"] or next_source_id(row["provider_id"])
+        source_id = next_source_id(row["provider_id"], label)
         out_path = yaml_path_for(source_id)
         if out_path.exists():
-            return jsonify({"error": "yaml already exists", "source_id": source_id}), 400
+            return jsonify({"error": f"a source called '{source_id}' already exists — try a different label"}), 400
 
+        # Prefer the checklist row's own portal_license_name/portal_license_url/
+        # contact — locally editable via Edit source, so more likely current
+        # than providers.csv — falling back to providers.csv only if the
+        # checklist row was never filled in for those.
         providers = pd.read_csv(providers_csv, dtype=str).fillna("").set_index("provider_id")
         provider_row = providers.loc[row["provider_id"]] if row["provider_id"] in providers.index else None
+
+        def prefer_row(row_field, provider_field):
+            return row[row_field] or (provider_row[provider_field] if provider_row is not None else "")
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         source = {
             "source_id": source_id,
+            "label": label,
             "provider_id": row["provider_id"],
             "dataset_page_url": row["source_url"],
             "download_url": "",
             "format": "",
-            "license_name": provider_row["portal_license_name"] if provider_row is not None else "",
-            "license_url": provider_row["portal_license_url"] if provider_row is not None else "",
+            "license_name": prefer_row("portal_license_name", "portal_license_name"),
+            "license_url": prefer_row("portal_license_url", "portal_license_url"),
             "open_license": None,
-            "contact": provider_row["contact"] if provider_row is not None else "",
+            "contact": prefer_row("contact", "contact"),
             "source_updated_date": "",
             "retrieved_date": str(date.today()),
             "data_dictionary_url": "",
@@ -339,20 +390,112 @@ def create_blueprint(config: dict = None) -> Blueprint:
         with open(out_path, "w") as f:
             yaml.dump(source, f, sort_keys=False, allow_unicode=True)
 
-        # Normally already created by "Found" — this just covers it being deleted
-        # since, or a yaml generated without going through that step.
+        # Normally already created by "Found" (for a provider's first
+        # source) — this covers every other case: later sources, or this
+        # one's raw dir having been deleted since.
         (raw_dir / source_id).mkdir(parents=True, exist_ok=True)
 
-        df.at[row_index, "source_ids"] = source_id
+        existing_ids = source_ids_for(row)
+        df.at[row_index, "source_ids"] = ",".join(existing_ids + [source_id])
         save_checklist(df)
         return jsonify({"source_id": source_id})
+
+    @bp.route("/api/remove_source", methods=["POST"])
+    def api_remove_source():
+        # Destructive — deletes metadata.yaml and any downloaded raw data for
+        # this one source_id. Only ever called for a provider with more than
+        # one source (the UI hides Remove otherwise), so a provider never
+        # ends up with zero.
+        data = request.get_json()
+        row_index = int(data["row_index"])
+        source_id = (data.get("source_id") or "").strip()
+
+        df = load_checklist()
+        if row_index not in df.index:
+            return jsonify({"error": "row not found"}), 404
+        existing_ids = source_ids_for(df.loc[row_index])
+        if source_id not in existing_ids:
+            return jsonify({"error": "source not found on this row"}), 404
+
+        for base_dir in (sources_dir, raw_dir):
+            target = base_dir / source_id
+            if target.exists():
+                shutil.rmtree(target)
+
+        existing_ids.remove(source_id)
+        df.at[row_index, "source_ids"] = ",".join(existing_ids)
+        save_checklist(df)
+        return jsonify({"ok": True})
+
+    def downstream_work_exists(source_id: str) -> bool:
+        """Anything past collection already keyed off this exact source_id —
+        renaming past this point would silently orphan real work rather
+        than just relabeling an empty folder."""
+        candidates = [
+            sources_dir / source_id / "column_map.yaml",
+            sources_dir / source_id / "classification_map.yaml",
+        ]
+        for stage_name in ("preprocessing", "processing"):
+            try:
+                candidates.append(stage_output_dir(config, stage_name) / source_id)
+            except ValueError:
+                pass
+        return any(p.exists() for p in candidates)
+
+    @bp.route("/api/rename_source", methods=["POST"])
+    def api_rename_source():
+        # Only reachable while nothing downstream references this source_id
+        # yet (checked both here and again just before the actual rename, in
+        # case something changed in between) — label is otherwise locked
+        # forever specifically because renaming later would break real work.
+        data = request.get_json()
+        row_index = int(data["row_index"])
+        old_source_id = (data.get("old_source_id") or "").strip()
+        label = (data.get("label") or "").strip()
+
+        df = load_checklist()
+        if row_index not in df.index:
+            return jsonify({"error": "row not found"}), 404
+        row = df.loc[row_index]
+        existing_ids = source_ids_for(row)
+        if old_source_id not in existing_ids:
+            return jsonify({"error": "source not found on this row"}), 404
+
+        if downstream_work_exists(old_source_id):
+            return jsonify({"error": "can't rename — later pipeline steps already reference this source"}), 400
+
+        new_source_id = next_source_id(row["provider_id"], label) if label else old_source_id
+        if new_source_id == old_source_id:
+            return jsonify({"error": "nothing to rename"}), 400
+        if yaml_path_for(new_source_id).exists():
+            return jsonify({"error": f"'{new_source_id}' already exists"}), 400
+
+        old_yaml_dir = sources_dir / old_source_id
+        old_yaml_dir.rename(sources_dir / new_source_id)
+        old_raw_dir = raw_dir / old_source_id
+        if old_raw_dir.exists():
+            old_raw_dir.rename(raw_dir / new_source_id)
+
+        yaml_path = yaml_path_for(new_source_id)
+        yaml_data = yaml.safe_load(yaml_path.read_text()) or {}
+        yaml_data["source_id"] = new_source_id
+        yaml_data["label"] = label
+        with open(yaml_path, "w") as f:
+            yaml.dump(yaml_data, f, sort_keys=False, allow_unicode=True)
+
+        existing_ids[existing_ids.index(old_source_id)] = new_source_id
+        df.at[row_index, "source_ids"] = ",".join(existing_ids)
+        save_checklist(df)
+        return jsonify({"source_id": new_source_id})
 
     @bp.route("/api/source/<source_id>")
     def api_source_get(source_id):
         out_path = yaml_path_for(source_id)
         if not out_path.exists():
             return jsonify({"error": "not found"}), 404
-        return jsonify(yaml.safe_load(out_path.read_text()) or {})
+        result = yaml.safe_load(out_path.read_text()) or {}
+        result["_can_rename"] = not downstream_work_exists(source_id)
+        return jsonify(result)
 
     @bp.route("/api/detect_raw/<source_id>")
     def api_detect_raw(source_id):

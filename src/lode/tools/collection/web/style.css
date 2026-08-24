@@ -343,6 +343,53 @@ button.metadata-btn {
   color: #333;
 }
 
+.source-block {
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.source-block:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+.source-block-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.source-path {
+  margin-bottom: 0.75rem;
+}
+
+.source-block h3 {
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}
+
+.remove-source-btn {
+  font-size: 0.78rem;
+  color: #a13a3a;
+  border-color: #e2b8b8;
+}
+
+.remove-source-btn:hover {
+  background: #fbe4e4;
+}
+
+#add-another-source-btn {
+  display: block;
+  margin-top: 0.75rem;
+}
+
+.hidden {
+  display: none;
+}
+
 .edit-form {
   display: flex;
   flex-direction: column;

@@ -3,7 +3,7 @@
 pipeline/ (mechanical processing driven by those decisions).
 
     lode tools home                            # every tool's web UI, one process/port
-    lode tools collection sync|process|scaffold [-- script args]
+    lode tools collection sync|process [-- script args]
     lode pipeline run [--stage NAME] [--source ID]
     lode pipeline <stage-name> [--source ID]   # sugar for 'run --stage <stage-name>'
 """
@@ -15,7 +15,7 @@ from lode.helpers.config import load_config
 
 # collection commands whose flags are defined by their own script, not by this
 # CLI — see main()'s use of parse_known_args.
-PASSTHROUGH_COLLECTION_COMMANDS = {"sync", "process", "scaffold"}
+PASSTHROUGH_COLLECTION_COMMANDS = {"sync", "process"}
 
 
 def _pipeline_argv(stage, source):
@@ -40,7 +40,6 @@ def build_parser() -> argparse.ArgumentParser:
     collection_sub = collection_parser.add_subparsers(dest="collection_command", required=True)
     collection_sub.add_parser("sync", help="Refresh checklist.csv from providers.csv")
     collection_sub.add_parser("process", help="Stamp checked_date for rows checked outside the web UI")
-    collection_sub.add_parser("scaffold", help="Manually scaffold metadata.yaml for one provider+slug")
 
     pipeline_parser = subparsers.add_parser("pipeline", help="Mechanical, no-human-in-the-loop data processing")
     pipeline_sub = pipeline_parser.add_subparsers(dest="pipeline_command", required=True)
@@ -79,11 +78,10 @@ def main(argv=None):
             from lode.tools.home.web import server as home_server
             home_server.main()
         elif args.tool == "collection":
-            from lode.tools.collection import process_checklist, scaffold_source, sync_checklist
+            from lode.tools.collection import process_checklist, sync_checklist
             script = {
                 "sync": sync_checklist.main,
                 "process": process_checklist.main,
-                "scaffold": scaffold_source.main,
             }[args.collection_command]
             script(extras)
 
