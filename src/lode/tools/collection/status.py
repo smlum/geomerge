@@ -1,12 +1,9 @@
-"""Status helpers usable without spinning up collection's Flask app — the
-per-source piece (source_metadata_status) is what lode tools home shows in
-its table; checklist_summary is the provider-level stat line above it, since
-checklist.csv is grained by provider, not by the sources/ this tool's other
-status is grained by."""
+"""Status helpers usable without spinning up collection's Flask app —
+source_metadata_status/source_raw_data_status are what lode tools home shows
+in its table."""
 
 from pathlib import Path
 
-import pandas as pd
 import yaml
 
 
@@ -41,18 +38,3 @@ def source_raw_data_status(source_id: str, config: dict) -> str:
         return "missing"
     raw_path = repo_root / config["raw_dir"] / source_id / raw_filename
     return "complete" if raw_path.exists() else "missing"
-
-
-def checklist_summary(config: dict) -> dict:
-    """Provider-level counts (not per-source): how much of providers.csv has
-    been worked through, and how many were found."""
-    checklist_path = config["repo_root"] / config["sources_dir"] / "checklist.csv"
-    if not checklist_path.exists():
-        return {"total": 0, "checked": 0, "found": 0}
-    df = pd.read_csv(checklist_path, dtype=str).fillna("")
-    checked = (df["checked"] != "") | (df["checked_date"] != "")
-    return {
-        "total": int(len(df)),
-        "checked": int(checked.sum()),
-        "found": int((df["source_url"] != "").sum()),
-    }

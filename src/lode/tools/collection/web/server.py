@@ -497,6 +497,17 @@ def create_blueprint(config: dict = None) -> Blueprint:
         result["_can_rename"] = not downstream_work_exists(source_id)
         return jsonify(result)
 
+    # The raw file text, not the parsed dict api_source_get returns above —
+    # for lode tools home's read-only metadata preview modal, which shows
+    # the actual file (key order, comments, formatting) rather than a
+    # re-serialized version of it.
+    @bp.route("/api/source/<source_id>/raw")
+    def api_source_get_raw(source_id):
+        out_path = yaml_path_for(source_id)
+        if not out_path.exists():
+            return jsonify({"error": "not found"}), 404
+        return jsonify({"content": out_path.read_text()})
+
     @bp.route("/api/detect_raw/<source_id>")
     def api_detect_raw(source_id):
         source_raw_dir = raw_dir / source_id

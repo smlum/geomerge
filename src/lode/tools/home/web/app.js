@@ -17,6 +17,21 @@ function linkedCell(status, href, boundary) {
   return td;
 }
 
+// Opens a read-only preview of metadata.yaml in a modal (see
+// openMetadataModal) instead of jumping straight into collection/'s own
+// edit modal in a new tab — a quick look shouldn't cost a tab, and the
+// modal's own "Edit" button is right there if a look turns into an edit.
+function metadataCell(status, sourceId, boundary) {
+  const td = document.createElement("td");
+  if (boundary) td.classList.add("group-boundary");
+  const badge = statusBadge(status);
+  badge.classList.add("copyable");
+  badge.title = "Click to view metadata.yaml";
+  badge.addEventListener("click", () => openMetadataModal(sourceId));
+  td.appendChild(badge);
+  return td;
+}
+
 // No tool exists yet for this stage — a badge, not a link, so there's
 // nothing to click through to.
 function plainCell(status, boundary) {
@@ -57,6 +72,33 @@ async function copyCommand(badge, command) {
   }, 1000);
 }
 
+// Cross-blueprint fetch (collection/ owns metadata.yaml) — absolute path,
+// since this page is served from "/", not "/collection/".
+async function openMetadataModal(sourceId) {
+  document.getElementById("metadata-modal-title").textContent = sourceId;
+  document.getElementById("metadata-modal-edit").href = `collection/?id=${encodeURIComponent(sourceId)}`;
+  const content = document.getElementById("metadata-modal-content");
+  content.textContent = "Loading…";
+  document.getElementById("metadata-modal").classList.remove("hidden");
+
+  const res = await fetch(`/collection/api/source/${encodeURIComponent(sourceId)}/raw`);
+  if (res.status === 404) {
+    content.textContent = "No metadata.yaml yet for this source.";
+    return;
+  }
+  const data = await res.json();
+  content.textContent = data.content;
+}
+
+function closeMetadataModal() {
+  document.getElementById("metadata-modal").classList.add("hidden");
+}
+
+document.getElementById("metadata-modal-close").addEventListener("click", closeMetadataModal);
+document.getElementById("metadata-modal").addEventListener("click", (e) => {
+  if (e.target.id === "metadata-modal") closeMetadataModal();
+});
+
 // "Complete" means nothing left to do anywhere in the row — every stage
 // is either complete or not applicable. Validation is deliberately
 // excluded: it's a permanent "not_built" placeholder (see server.py, no
@@ -67,8 +109,8 @@ function isRowComplete(s) {
     s.collection.metadata,
     s.collection.raw,
     s.tools.column_mapping,
+    s.tools.preprocessing,
     s.tools.classification,
-    s.pipeline.preprocessing,
     s.pipeline.processing,
   ];
   return statuses.every((st) => st === "complete" || st === "not_applicable");
@@ -82,18 +124,21 @@ function renderRow(s) {
   nameTd.textContent = s.source_id;
   tr.appendChild(nameTd);
 
-  // collection/ — metadata links into the collection tool; raw is just a
-  // badge for whether the file showed up on disk, no tool to click into.
-  tr.appendChild(linkedCell(s.collection.metadata, `collection/?id=${encodeURIComponent(s.source_id)}`, true));
+  // collection/ — metadata opens a read-only preview modal (see
+  // metadataCell); raw is just a badge for whether the file showed up on
+  // disk, no tool to click into.
+  tr.appendChild(metadataCell(s.collection.metadata, s.source_id, true));
   tr.appendChild(plainCell(s.collection.raw));
 
-  // tools/ — human-reviewed, each linking into its own web UI.
+  // tools/ — human-reviewed cells link into their own web UI; preprocessing
+  // sits between them (mechanical, no review UI, but classification can't
+  // run without it — see server.py).
   tr.appendChild(linkedCell(s.tools.column_mapping, `column-mapping/map.html?id=${encodeURIComponent(s.source_id)}`, true));
+  tr.appendChild(pipelineCell(s.tools.preprocessing, s.source_id, "preprocessing"));
   tr.appendChild(linkedCell(s.tools.classification, `classification/review.html?id=${encodeURIComponent(s.source_id)}`));
 
   // pipeline/ — mechanical, no review UI to link into yet.
-  tr.appendChild(pipelineCell(s.pipeline.preprocessing, s.source_id, "preprocessing", true));
-  tr.appendChild(pipelineCell(s.pipeline.processing, s.source_id, "processing"));
+  tr.appendChild(pipelineCell(s.pipeline.processing, s.source_id, "processing", true));
   tr.appendChild(plainCell(s.pipeline.validation));
 
   return tr;
@@ -136,16 +181,18 @@ function render() {
   for (const s of visible) {
     body.appendChild(renderRow(s));
   }
+
+  // About this table's own rows (every stage, not just one), not the
+  // provider-checklist-level "X checked, Y found" stat collection's page
+  // already covers — same completeness rule as the Complete/Incomplete
+  // filter above, independent of whatever filter is currently selected.
+  const completeCount = sources.filter(isRowComplete).length;
+  document.getElementById("summary").textContent = `${completeCount} / ${sources.length} sources complete`;
 }
 
 async function load() {
-  const [sourcesRes, summaryRes] = await Promise.all([fetch("api/sources"), fetch("api/summary")]);
-  sources = await sourcesRes.json();
-  const summary = (await summaryRes.json()).checklist;
-
-  document.getElementById("summary").textContent =
-    `${summary.checked} / ${summary.total} providers checked  ·  ${summary.found} found`;
-
+  const res = await fetch("api/sources");
+  sources = await res.json();
   render();
 }
 

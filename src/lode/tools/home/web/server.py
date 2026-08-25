@@ -14,6 +14,8 @@ Usage:
     lode tools home
 Then open http://localhost:8640
     http://localhost:8640/collection/
+    http://localhost:8640/prep/
+    http://localhost:8640/pipeline/
     http://localhost:8640/column-mapping/
     http://localhost:8640/classification/
 """
@@ -26,10 +28,12 @@ from lode.helpers.config import load_config
 from lode.pipeline.status import preprocessing_status, processing_status
 from lode.tools.classification.status import source_status as classification_status
 from lode.tools.classification.web.server import create_blueprint as create_classification_blueprint
-from lode.tools.collection.status import checklist_summary, source_metadata_status, source_raw_data_status
+from lode.tools.collection.status import source_metadata_status, source_raw_data_status
 from lode.tools.collection.web.server import create_blueprint as create_collection_blueprint
 from lode.tools.column_mapping.status import source_status as column_mapping_status
 from lode.tools.column_mapping.web.server import create_blueprint as create_column_mapping_blueprint
+from lode.tools.pipeline.web.server import create_blueprint as create_pipeline_tab_blueprint
+from lode.tools.prep.web.server import create_blueprint as create_prep_blueprint
 
 
 def create_app(config: dict = None) -> Flask:
@@ -39,6 +43,8 @@ def create_app(config: dict = None) -> Flask:
 
     app = Flask(__name__, static_folder=str(Path(__file__).parent), static_url_path="")
     app.register_blueprint(create_collection_blueprint(config), url_prefix="/collection")
+    app.register_blueprint(create_prep_blueprint(config), url_prefix="/prep")
+    app.register_blueprint(create_pipeline_tab_blueprint(config), url_prefix="/pipeline")
     app.register_blueprint(create_column_mapping_blueprint(config), url_prefix="/column-mapping")
     app.register_blueprint(create_classification_blueprint(config), url_prefix="/classification")
 
@@ -79,30 +85,29 @@ def create_app(config: dict = None) -> Flask:
                     "metadata": source_metadata_status(source_id, config),
                     "raw": source_raw_data_status(source_id, config),
                 },
-                # tools/ — human-reviewed decisions needed before the pipeline
-                # can run, each with its own web UI.
+                # tools/ (displayed as "Prep") — human-reviewed decisions
+                # needed before the rest of the pipeline can run, plus
+                # preprocessing itself: mechanical (no review UI of its own),
+                # but it sits here rather than in pipeline/ below because
+                # classification can't run without it — it reads the
+                # standardized columns preprocessing produces, not raw ones.
                 "tools": {
                     "column_mapping": cm["column_map_status"],
+                    "preprocessing": preprocessing_status(source_id, config),
                     "classification": classification_overall,
                 },
-                # pipeline/ — mechanical processing driven by those decisions;
-                # no review UI, just "has it run, is it stale". Validation is
-                # a placeholder — no automated-check step exists yet
-                # (lode.config.yaml's "validate" stage is still commented
-                # out) — "not_built" rather than "not_started" so it doesn't
-                # read as "you have work to do" when the real answer is
-                # "there's nothing here yet".
+                # pipeline/ — mechanical processing with no human decisions
+                # of its own. Validation is a placeholder — no automated-
+                # check step exists yet (lode.config.yaml's "validate" stage
+                # is still commented out) — "not_built" rather than
+                # "not_started" so it doesn't read as "you have work to do"
+                # when the real answer is "there's nothing here yet".
                 "pipeline": {
-                    "preprocessing": preprocessing_status(source_id, config),
                     "processing": processing_status(source_id, config),
                     "validation": "not_built",
                 },
             })
         return jsonify(result)
-
-    @app.route("/api/summary")
-    def api_summary():
-        return jsonify({"checklist": checklist_summary(config)})
 
     return app
 

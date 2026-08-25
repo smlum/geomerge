@@ -218,3 +218,36 @@ td a {
   filter: brightness(0.92);
 }
 
+/* A read-only, monochrome preview of the actual metadata.yaml file — plain
+   monospace text, no syntax highlighting, so it reads as "here's the file"
+   rather than a second editing surface competing with the real one. */
+.code-block {
+  background: #f5f5f5;
+  color: #333;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.edit-btn {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  background: #2c5aa0;
+  color: white;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.edit-btn:hover {
+  background: #234a85;
+}
+
