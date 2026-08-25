@@ -1,0 +1,19 @@
+/* Shared by every tool's data table (home, collection, ...) — loaded via an
+   absolute <link href="/table.css">, same reasoning as nav.css/nav.js: one
+   copy instead of one per tool. Each tool's own style.css still owns
+   overflow/max-height/scroll behavior, which differs per table (some are
+   capped to an internally-scrolling region, some aren't); this file only
+   owns the shared "closed card" look: rounded corners, shadow, and a plain
+   gray footer cap matching the header. */
+
+.table-scroll {
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+tfoot td {
+  height: 0.75rem;
+  padding: 0;
+  background: #f0f0f0;
+  border-bottom: none;
+}

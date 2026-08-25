@@ -10,33 +10,71 @@ body {
   box-sizing: border-box;
 }
 
-header {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-h1 {
-  font-size: 1.2rem;
-  margin: 0;
-}
-
 .meta {
   font-size: 0.85rem;
   color: #888;
 }
 
-a.meta {
-  text-decoration: none;
+/* Sticks right below the sticky nav bar above it, not at the very top —
+   same treatment as collection/style.css's header. */
+header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  position: sticky;
+  top: var(--nav-height, 50px);
+  z-index: 2;
+  background: #fafafa;
+  /* Papers over a sub-pixel seam some browsers show at a sticky element's
+     edge during scroll — same color as the header itself, so it's
+     invisible except for sealing that hairline gap. */
+  box-shadow: 0 1px 0 #fafafa;
+  /* Safari specifically fails to repaint a sticky element's exact boundary
+     pixel cleanly during scroll compositing (a known WebKit bug, not
+     present in Chrome) — forcing it onto its own GPU layer fixes it. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
-a.meta:hover {
-  text-decoration: underline;
+.toggle {
+  font-size: 0.9rem;
+  color: #444;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
+/* Sticks to the bottom of the viewport, same idea as the nav bar at the
+   top. Height is fixed (not content-driven): the summary text is empty
+   until it loads, and a content-driven height would grow once it pops in,
+   shifting table-scroll (whose height is sized around this same height,
+   see below) right along with it. */
+.lode-footer {
+  display: flex;
+  align-items: center;
+  height: 3rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 1.5rem -2rem -4rem;
+  padding: 0 2rem;
+  background: white;
+  border-top: 1px solid #eee;
+}
+
+/* A fixed height, not max-height: this needs to fill the remaining
+   viewport even before any rows have loaded (an empty tbody would
+   otherwise shrink it to just the thead's height), so the page's whole
+   "shape" is stable from first paint instead of growing once data
+   arrives. Real (not just horizontal) overflow makes this a genuine
+   scroll container, which is what makes position: sticky on the thead
+   below actually work rather than being a no-op.
+
+   3rem matches .lode-footer's fixed height above; the extra 0.75rem is a
+   deliberate gap between the table card and the footer, not slack. */
 .table-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  height: calc(100vh - var(--header-height, 80px) - 3rem - 0.75rem);
 }
 
 table {
@@ -44,7 +82,6 @@ table {
   min-width: 700px;
   border-collapse: collapse;
   background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 th, td {
@@ -56,10 +93,27 @@ th, td {
   white-space: nowrap;
 }
 
-th {
-  background: #f0f0f0;
+/* Sticky on thead itself, not on each th — with two header rows, making
+   every th independently sticky (each its own composited layer, needed
+   for the translateZ Safari fix below) left a persistent sub-pixel seam
+   between the two rows in Safari where a scrolled-past body row peeked
+   through, even once their positions matched exactly to the pixel. One
+   sticky element instead of several adjacent ones sidesteps that
+   inter-layer seam entirely — both rows move together, so there's nothing
+   for a scrolled row to show through between. */
+thead {
   position: sticky;
   top: 0;
+  z-index: 1;
+  /* Safari specifically fails to repaint a sticky element's exact boundary
+     pixel cleanly during scroll compositing (a known WebKit bug, not
+     present in Chrome) — forcing it onto its own GPU layer fixes it. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+th {
+  background: #f0f0f0;
 }
 
 .group-header {
@@ -90,9 +144,10 @@ th {
   color: #555;
 }
 
-/* Divides the tools/ group (human-reviewed, each with its own web UI) from
-   the pipeline/ group (mechanical, no review UI) — a deliberate distinction
-   in how the project's built, not just a visual one. */
+/* Divides the collection/ group (finding + landing raw data) from the
+   tools/ group (human-reviewed decisions needed before the pipeline can
+   run) from the pipeline/ group (mechanical, no review UI) — a deliberate
+   distinction in how the project's built, not just a visual one. */
 .group-boundary {
   border-left: 2px solid #ddd;
 }
@@ -162,3 +217,4 @@ td a {
 .status.copyable:hover {
   filter: brightness(0.92);
 }
+

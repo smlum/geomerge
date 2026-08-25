@@ -25,29 +25,57 @@ Providers live wherever `lode.config.yaml`'s `providers_csv` points (this projec
 (`checklist.csv`, `<source_id>/metadata.yaml`); the tools that manage them are in
 `src/lode/tools/collection/`.
 
+**Data model**
+- One checklist row per **provider**, always — never duplicated per dataset. A provider with
+  more than one relevant dataset (e.g. a separate multi-use-trails layer) keeps a single row
+  whose `source_ids` column is a comma-separated list; the metadata modal shows one independent
+  field-block per source_id, with a "+ Add another source" button to append more.
+- `metadata_status`/`raw_data_status` on a row are the **worst case across all its source_ids**
+  (e.g. `missing` if any source has none, `complete` only once every one of them is).
+- `provider_id` is assigned once, at creation, and never changes. Each source's own id
+  (`{provider_id}_cycling` by default, or `{provider_id}_{slugify(label)}` once a label is set)
+  is baked in at creation too, but can be changed via a gated "Rename" control in the metadata
+  modal — only offered while no downstream work exists yet for that source (no
+  `column_map.yaml`/`classification_map.yaml`, no preprocessing/processing output).
+
 **Workflow**
 - `lode tools collection sync` — builds/updates `checklist.csv` from `providers.csv`. Safe to
   re-run any time; never loses progress.
-- `lode tools home` (http://localhost:8640/collection/) — one tool, two things:
+- `lode tools home` (http://localhost:8640/collection/) — one tool, three things:
+  - **+ Add provider** — add a row not yet in `providers.csv`/`checklist.csv` directly (name,
+    province, provider_id with a "Generate" button + exact-match duplicate check, geography
+    level, portal URL, portal license name/URL, contact, notes). Clicking a row's provider name
+    reopens this same modal to edit those fields in place (provider_id locked once created).
   - Browse each row's portal and record what you find: Found → `source_url`, Nothing → `checked`.
     `prior_url` (e.g. a 2024 CCND lead) is offered as a starting point but never overwritten by
     these actions, so a mistaken "not found" can't destroy it. As soon as a row is Found,
-    `data/raw/<source_id>/` is created so there's somewhere to land the download.
-  - Once found, the row's Metadata column lets you generate `sources/<source_id>/metadata.yaml`
-    (deliberately on demand, not automatic) and fill in the rest (`format`, `raw_filename`,
-    etc.) in a modal — including a "Detect" button that reads whatever you've dropped in
-    `data/raw/<source_id>/` to prefill `format`/`raw_filename`.
+    `data/raw/{provider_id}_cycling/` is speculatively created (the id a first, unlabeled source
+    would get) so there's somewhere to land the download before any yaml exists.
+  - Once found, the row's Metadata column opens a modal to fill in each source's fields
+    (`format`, `raw_filename`, license, dates, etc.) — generation of `sources/<source_id>/metadata.yaml`
+    itself is deferred until Save, prefilled from the checklist row's own `source_url`/portal
+    license/contact fields. A "Detect" button reads whatever's sitting in the source's raw
+    folder to fill in `raw_filename`/`format` — it works even pre-save, since the folder can
+    already exist (see above). The Open-license checkbox auto-follows the license URL field
+    live until manually touched, then stops overriding it.
+  - **Show:** filter partitions every row into exactly one of **Not found** / **Incomplete** /
+    **Complete** (Complete requires metadata *and* raw data both complete — not just metadata),
+    plus a cross-cutting **Flagged** view for anything checked off for attention (paired with a
+    per-row note explaining why, e.g. "no portal URL, need to email their contact").
 - `lode tools collection process` — just stamps `checked_date` for rows checked off by hand
   outside the UI (e.g. direct CSV edits). Never touches yaml.
 
 **Notes**
 - `checked`/`checked_date` are tracked distinctly from what was found, so future years know
   what's already been reviewed, not just what's been found so far.
-- A provider with more than one dataset gets a duplicated checklist row, not a list column.
-- `provider_id` must stay unique in `providers.csv` — when two distinct providers share a
-  name (e.g. a city and the surrounding region/county), disambiguate with a suffix rather
+- `provider_id` must stay unique in `providers.csv`/`checklist.csv` — when two distinct providers
+  share a name (e.g. a city and the surrounding region/county), disambiguate with a suffix rather
   than merging them onto one id; it's also the basis for `source_id` and the
-  `data/raw/<source_id>/` folder, so a collision there would collide downstream too.
+  `data/raw/<source_id>/` folder, so a collision there would collide downstream too. The Add/Edit
+  provider modal only catches *exact* id collisions, not near-duplicates (e.g. "Region of York"
+  vs. "York Region") — a known gap, not yet solved.
+- `scaffold_source.py` was removed — the web UI's "+ Add another source" replaced its job
+  entirely once the one-row-per-provider model was settled on.
 
 ## 2. Data inspection
 

@@ -12,7 +12,8 @@ header {
   gap: 1.5rem;
   margin-bottom: 1rem;
   position: sticky;
-  top: 0;
+  /* Sticks right below the sticky nav bar above it, not at the very top. */
+  top: var(--nav-height, 50px);
   z-index: 2;
   background: #fafafa;
   /* Papers over a sub-pixel seam some browsers show at a sticky element's
@@ -26,28 +27,6 @@ header {
      present in Chrome) — forcing it onto its own GPU layer fixes it. */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
-}
-
-.tool-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #999;
-  margin-bottom: 0.15rem;
-}
-
-h1 {
-  font-size: 1.2rem;
-  margin: 0;
-}
-
-.back-link {
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: #2c5aa0;
-  text-decoration: none;
-  white-space: nowrap;
 }
 
 #progress {
@@ -68,6 +47,36 @@ h1 {
   gap: 0.35rem;
 }
 
+/* Sticks to the bottom of the viewport, same idea as the nav bar at the
+   top. Everything that isn't the live filter control lives here: the
+   editing path, the progress stat (dynamic, so keeping it out of the
+   page's normal flow avoids a load-in layout shift), and Add provider —
+   already just as reachable as it was in the old sticky header, so moving
+   it down here costs nothing.
+
+   Height is fixed (not content-driven) on purpose: the stat text is empty
+   until it loads, and a content-driven height would grow once it pops in,
+   shifting table-scroll (whose max-height is sized around this same
+   height, see below) right along with it. Fixed means the footer — and
+   everything above it — is stable from first paint. */
+.lode-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 3rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 1.5rem -2rem -4rem;
+  padding: 0 2rem;
+  background: white;
+  border-top: 1px solid #eee;
+}
+
+.lode-footer #add-source-btn {
+  margin-left: auto;
+}
+
 /* A genuinely self-scrolling region (not just horizontal) sized to fill the
    viewport below the sticky page header — per the CSS spec, overflow-x:
    auto alone silently forces overflow-y to auto too, which would otherwise
@@ -77,7 +86,15 @@ h1 {
    makes that containing block genuine instead of an accidental no-op. */
 .table-scroll {
   overflow: auto;
-  max-height: calc(100vh - var(--header-height, 100px));
+  /* A fixed height, not max-height: this needs to fill the remaining
+     viewport even before any rows have loaded (an empty tbody would
+     otherwise shrink it to just the thead's height), so the page's whole
+     "shape" is stable from first paint instead of growing once data
+     arrives. 3rem matches .lode-footer's fixed height above — a literal,
+     not a var, since it's a fixed constant now rather than something JS
+     measures. The extra 0.75rem is a deliberate gap between the table
+     card and the footer, not slack. */
+  height: calc(100vh - var(--header-height, 100px) - 3rem - 0.75rem);
 }
 
 table {
@@ -87,7 +104,6 @@ table {
   border-collapse: separate;
   border-spacing: 0;
   background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 th, td {

@@ -3,17 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <title>Checklist</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+  <link rel="stylesheet" href="/nav.css" />
+  <link rel="stylesheet" href="/table.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <div class="title-block">
-      <div class="tool-label">Collection</div>
-      <h1>Data source checklist</h1>
-      <div id="checklist-path" class="meta"></div>
+  <nav class="lode-nav">
+    <a href="/" class="lode-brand">lode tools</a>
+    <div class="lode-tabs">
+      <a href="/" class="lode-tab tab-blue">Home</a>
+      <a href="/collection/" class="lode-tab active tab-peach">Collection</a>
     </div>
+  </nav>
+  <header>
     <label class="toggle">
-      Show:
+      Filter:
       <select id="filter-mode">
         <option value="all" selected>All</option>
         <option value="not_found">Not found</option>
@@ -22,9 +28,6 @@
         <option value="flagged">Flagged</option>
       </select>
     </label>
-    <div id="progress"></div>
-    <button id="add-source-btn" type="button">+ Add provider</button>
-    <a href="/" class="back-link">&larr; Home</a>
   </header>
   <div class="table-scroll">
   <table id="rows">
@@ -51,8 +54,16 @@
       </tr>
     </thead>
     <tbody id="rows-body"></tbody>
+    <tfoot>
+      <tr><td colspan="8"></td></tr>
+    </tfoot>
   </table>
   </div>
+  <footer class="lode-footer">
+    <span id="checklist-path" class="meta"></span>
+    <span id="progress" class="meta"></span>
+    <button id="add-source-btn" type="button">+ Add provider</button>
+  </footer>
 
   <div id="metadata-modal" class="modal-overlay hidden">
     <div class="modal-panel">

@@ -73,23 +73,26 @@ def create_app(config: dict = None) -> Flask:
 
             result.append({
                 "source_id": source_id,
-                # tools/ — human-reviewed decisions, each with its own web UI.
-                "tools": {
+                # collection/ — what the collection checklist tool produces:
+                # metadata.yaml and the raw file landing on disk.
+                "collection": {
                     "metadata": source_metadata_status(source_id, config),
+                    "raw": source_raw_data_status(source_id, config),
+                },
+                # tools/ — human-reviewed decisions needed before the pipeline
+                # can run, each with its own web UI.
+                "tools": {
                     "column_mapping": cm["column_map_status"],
                     "classification": classification_overall,
                 },
                 # pipeline/ — mechanical processing driven by those decisions;
-                # no review UI, just "has it run, is it stale". raw is here
-                # rather than in tools/ for the same reason: there's no tool
-                # to click into, just a badge for whether the file showed up
-                # on disk. Validation is a placeholder — no automated-check
-                # step exists yet (lode.config.yaml's "validate" stage is
-                # still commented out) — "not_built" rather than
-                # "not_started" so it doesn't read as "you have work to do"
-                # when the real answer is "there's nothing here yet".
+                # no review UI, just "has it run, is it stale". Validation is
+                # a placeholder — no automated-check step exists yet
+                # (lode.config.yaml's "validate" stage is still commented
+                # out) — "not_built" rather than "not_started" so it doesn't
+                # read as "you have work to do" when the real answer is
+                # "there's nothing here yet".
                 "pipeline": {
-                    "raw": source_raw_data_status(source_id, config),
                     "preprocessing": preprocessing_status(source_id, config),
                     "processing": processing_status(source_id, config),
                     "validation": "not_built",

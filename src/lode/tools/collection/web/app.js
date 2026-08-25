@@ -1025,20 +1025,41 @@ async function openFromQueryParam() {
   if (row) await openMetadata(row);
 }
 
-// Table header sticks right below the page header rather than at the very
-// top — measured rather than hardcoded, since the header's height depends
-// on its (dynamically loaded) content and can reflow on resize.
+// Table header sticks right below the page header, which itself sticks
+// right below the nav bar — both measured rather than hardcoded, since
+// their height can reflow on resize. Nav and header are static markup (no
+// fetched content), so this runs immediately rather than waiting on
+// bootstrap()'s fetches — table-scroll is correctly sized to fill the
+// viewport from first paint instead of jumping once data arrives.
+//
+// Measured via table-scroll's own boundingClientRect (plus the current
+// scroll offset, to get its true document position rather than wherever
+// it's currently scrolled to), not by summing up nav/header offsetHeights
+// — those miss the CSS margins between nav, header and table-scroll,
+// which undercounts the real space consumed above it.
+//
+// The footer, unlike nav/header, sizes its own dynamically-loaded content
+// (the progress stat), so it isn't safe to measure this early — instead
+// it's given a fixed CSS height (see .lode-footer), which table-scroll's
+// max-height subtracts as a plain constant. Fixed also means the footer
+// never resizes once its text pops in, which was the actual "jumps on
+// load" bug.
 function updateHeaderOffset() {
-  const header = document.querySelector("header");
-  document.documentElement.style.setProperty("--header-height", `${header.offsetHeight}px`);
+  const nav = document.querySelector(".lode-nav");
+  const tableScroll = document.querySelector(".table-scroll");
+  document.documentElement.style.setProperty("--nav-height", `${nav ? nav.offsetHeight : 0}px`);
+  if (tableScroll) {
+    const topOffset = tableScroll.getBoundingClientRect().top + window.scrollY;
+    document.documentElement.style.setProperty("--header-height", `${topOffset}px`);
+  }
 }
 window.addEventListener("resize", updateHeaderOffset);
+updateHeaderOffset();
 
 async function bootstrap() {
   await loadMeta();
   await loadRows();
   await openFromQueryParam();
-  updateHeaderOffset();
 }
 
 bootstrap();
