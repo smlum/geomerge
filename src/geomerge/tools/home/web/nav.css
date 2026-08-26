@@ -1,0 +1,109 @@
+/* Shared by every tool page (collection, column-mapping, classification) —
+   loaded via an absolute <link href="/nav.css">, not each tool's own static
+   folder, same reasoning as nav.js: one copy instead of one per tool. */
+
+/* Departure Mono by Helena Zhang (SIL OFL 1.1, see assets/fonts/) — a
+   pixel font, for the brand mark only, to lean into the favicon's retro
+   pixel-art look without pushing that onto body text/tables. */
+@font-face {
+  font-family: "Departure Mono";
+  src: url("/assets/fonts/DepartureMono-Regular.woff2") format("woff2"),
+       url("/assets/fonts/DepartureMono-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.geomerge-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.9rem 2rem;
+  margin: -1.5rem -2rem 1.5rem;
+  background: white;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.geomerge-brand {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: #1a1a1a;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+
+.geomerge-brand:hover {
+  color: #555;
+}
+
+.geomerge-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.geomerge-tab {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #666;
+  text-decoration: none;
+}
+
+.geomerge-tab:hover {
+  color: #1a1a1a;
+  background: #f2f2f2;
+}
+
+.geomerge-tab.active {
+  color: #1a1a1a;
+  font-weight: 600;
+  background: #f0f0f0;
+}
+
+/* A small pastel palette for tab identity, kept deliberately distinct from
+   the status-badge palette (green/yellow/red — those mean complete/warning/
+   missing) so a colored tab never reads as a status. Six here, two in use
+   (Home, Collection) — the rest are ready for Tools/Pipeline/etc. as they
+   become tabs. Each color shows on hover too (a preview of that tab's
+   identity) as well as when active — hover doesn't get the bold weight,
+   so it still reads as "not the current page". */
+.geomerge-tab.active.tab-blue,
+.geomerge-tab.tab-blue:hover {
+  background: #e4ebfa;
+  color: #3a5a94;
+}
+
+.geomerge-tab.active.tab-peach,
+.geomerge-tab.tab-peach:hover {
+  background: #fbe9dd;
+  color: #a35a28;
+}
+
+.geomerge-tab.active.tab-purple,
+.geomerge-tab.tab-purple:hover {
+  background: #ede4fa;
+  color: #6b3fa0;
+}
+
+.geomerge-tab.active.tab-teal,
+.geomerge-tab.tab-teal:hover {
+  background: #dff5f0;
+  color: #1f7a63;
+}
+
+.geomerge-tab.active.tab-pink,
+.geomerge-tab.tab-pink:hover {
+  background: #fbe4ee;
+  color: #a13a6e;
+}
+
+.geomerge-tab.active.tab-cyan,
+.geomerge-tab.tab-cyan:hover {
+  background: #dff3f8;
+  color: #1f6f85;
+}

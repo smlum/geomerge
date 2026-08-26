@@ -1,6 +1,6 @@
 # Workflow
 
-This document explains the intended workflow to create a new LODE dataset.
+This document explains the intended workflow to create a new dataset with geomerge.
 
 ## Workflow overview
 
@@ -20,10 +20,10 @@ A broad overview of the workflow is:
 
 ## 1. Data collection
 
-Providers live wherever `lode.config.yaml`'s `providers_csv` points (this project:
+Providers live wherever `geomerge.config.yaml`'s `providers_csv` points (this project:
 `ca-data-providers/providers.csv`). Checklist + per-source files live in `sources/`
 (`checklist.csv`, `<source_id>/metadata.yaml`); the tools that manage them are in
-`src/lode/tools/collection/`.
+`src/geomerge/tools/collection/`.
 
 **Data model**
 - One checklist row per **provider**, always — never duplicated per dataset. A provider with
@@ -39,9 +39,9 @@ Providers live wherever `lode.config.yaml`'s `providers_csv` points (this projec
   `column_map.yaml`/`classification_map.yaml`, no preprocessing/processing output).
 
 **Workflow**
-- `lode tools collection sync` — builds/updates `checklist.csv` from `providers.csv`. Safe to
+- `geomerge tools collection sync` — builds/updates `checklist.csv` from `providers.csv`. Safe to
   re-run any time; never loses progress.
-- `lode tools home` (http://localhost:8640/collection/) — one tool, three things:
+- `geomerge serve` (http://localhost:8640/collection/) — one tool, three things:
   - **+ Add provider** — add a row not yet in `providers.csv`/`checklist.csv` directly (name,
     province, provider_id with a "Generate" button + exact-match duplicate check, geography
     level, portal URL, portal license name/URL, contact, notes). Clicking a row's provider name
@@ -62,7 +62,7 @@ Providers live wherever `lode.config.yaml`'s `providers_csv` points (this projec
     **Complete** (Complete requires metadata *and* raw data both complete — not just metadata),
     plus a cross-cutting **Flagged** view for anything checked off for attention (paired with a
     per-row note explaining why, e.g. "no portal URL, need to email their contact").
-- `lode tools collection process` — just stamps `checked_date` for rows checked off by hand
+- `geomerge tools collection process` — just stamps `checked_date` for rows checked off by hand
   outside the UI (e.g. direct CSV edits). Never touches yaml.
 
 **Notes**
@@ -98,7 +98,7 @@ Providers live wherever `lode.config.yaml`'s `providers_csv` points (this projec
 - Column mapping file(s) (manually reviewed and locked in)
 
 **Workflow**
-- `lode tools home` (http://localhost:8640/column-mapping/) — inspects each source's raw file,
+- `geomerge serve` (http://localhost:8640/column-mapping/) — inspects each source's raw file,
   suggests targets via rule-based matching, and saves reviewed/corrected mappings to
   `sources/<source_id>/column_map.yaml`
 
@@ -122,7 +122,7 @@ Providers live wherever `lode.config.yaml`'s `providers_csv` points (this projec
   - Rows per file
 
 **Workflow**
-- `lode pipeline preprocessing` (or `lode pipeline run --stage preprocessing`)
+- `geomerge pipeline preprocessing` (or `geomerge pipeline run --stage preprocessing`)
 
 ## 4. Data classification
 
@@ -136,19 +136,19 @@ Providers live wherever `lode.config.yaml`'s `providers_csv` points (this projec
 - Reviewed/locked classification mapping
 
 **Workflow**
-- `lode tools home` (http://localhost:8640/classification/) — rule-based first pass (single
-  primary source column per target, see lode.config.yaml's tools.classification.targets),
+- `geomerge serve` (http://localhost:8640/classification/) — rule-based first pass (single
+  primary source column per target, see geomerge.config.yaml's tools.classification.targets),
   then manual review/correction, saved to `sources/<source_id>/classification_map.yaml`
   - For each unique raw value combination:
     - Number of rows
     - Google Street View, on demand — optional per target attribute, since it's only really
       needed for canbics_class (embedded via the Maps Embed API, or mock/link-only mode with
-      no key required — see lode.config.yaml's tools.classification.street_view)
+      no key required — see geomerge.config.yaml's tools.classification.street_view)
   - A value can be marked "not included", which `classify:apply` filters out of the pipeline
     entirely — not just left unclassified
 
 `scripts/classification-review/` is a separate, standalone tool (project-specific, not in
-`lode/`) for post-hoc spot-checking the *merged* dataset's classification — a different job
+`geomerge/`) for post-hoc spot-checking the *merged* dataset's classification — a different job
 from driving the initial per-source assignment above.
 
 **Notes**
@@ -168,7 +168,7 @@ from driving the initial per-source assignment above.
   - Summary before/after filtering. Transparent on rows dropped for what reason
 
 **Workflow**
-- `lode pipeline run` (runs each configured stage in order) — not yet built beyond preprocessing
+- `geomerge pipeline run` (runs each configured stage in order) — not yet built beyond preprocessing
 
 **Steps**
 - Per provider file, processed concurrently:

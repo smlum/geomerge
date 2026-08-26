@@ -1,5 +1,5 @@
 [project]
-name = "lode"
+name = "geomerge"
 version = "0.1.0"
 description = "Tools and pipeline for building geospatial datasets from open-data sources."
 requires-python = ">=3.10"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-lode = "lode.cli:main"
+geomerge = "geomerge.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -26,7 +26,10 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"lode.tools.column_mapping.web" = ["*.html", "*.js", "*.css"]
-"lode.tools.collection.web" = ["*.html", "*.js", "*.css"]
-"lode.tools.classification.web" = ["*.html", "*.js", "*.css"]
-"lode.tools.home.web" = ["*.html", "*.js", "*.css"]
+"geomerge.tools.column_mapping.web" = ["*.html", "*.js", "*.css"]
+"geomerge.tools.collection.web" = ["*.html", "*.js", "*.css"]
+"geomerge.tools.classification.web" = ["*.html", "*.js", "*.css"]
+"geomerge.tools.home.web" = ["*.html", "*.js", "*.css", "assets/*", "assets/fonts/*"]
+"geomerge.tools.prep.web" = ["*.html", "*.js", "*.css"]
+"geomerge.tools.pipeline.web" = ["*.html", "*.js", "*.css"]
+"geomerge.tools.validate.web" = ["*.html", "*.js", "*.css"]
