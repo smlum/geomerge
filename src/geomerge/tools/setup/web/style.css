@@ -1,0 +1,524 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 1.5rem 2rem 4rem;
+  color: var(--color-text);
+  background: var(--color-page-bg);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+h1 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.meta {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.15rem;
+}
+
+/* The footer's "editing: <path>" link — same role as collection's own
+   footer path text, but clickable here: opens a read-only raw-file preview
+   (see file-preview.js) instead of just stating the path. */
+/* Deliberately doesn't touch font-family/font-size/color — this is always
+   paired with class="meta" on the same element (see schema.html), and
+   "inherit" would pull from the parent footer instead of picking up that
+   sibling class's own values, since both classes apply to the same element
+   rather than one nesting inside the other. Leaving these properties unset
+   here is what lets .meta's declarations show through untouched. */
+.footer-file-link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.footer-file-link:hover {
+  background: none;
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.code-block {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.code-block.hljs {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+}
+
+.modal-title-block {
+  min-width: 0;
+}
+
+#file-preview-path {
+  margin-top: 0.15rem;
+  word-break: break-all;
+}
+
+/* Setup's own tab accent (see nav.css's tab-cyan, mapped to --ctp-sapphire)
+   — mirrors how Prepare's pages tint their own header link with its own tab
+   color (see column_mapping/style.css's .source-link) rather than reusing
+   collection's old plain blue. */
+.back-link {
+  font-size: 0.85rem;
+  color: var(--ctp-sapphire);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* Same footer bar look as home/prep's (see their style.css) — white with a
+   top border — but position: fixed to the viewport rather than their
+   position: sticky, same reasoning as column_mapping/style.css's footer:
+   theirs works because their table fills a JS-measured calc(100vh - ...)
+   region sized to land the footer exactly at the viewport bottom regardless
+   of row count. Setup's pages have no equivalent fixed-height region — the
+   hub is a couple of cards, the schema editor is anywhere from a handful to
+   dozens of field rows — so there's no height to compute a sticky offset
+   from. A sticky footer on a page shorter than the viewport (the hub, most
+   of the time) would just float mid-page instead of touching the bottom, as
+   min-height: 100vh + margin-top: auto turned out to still fail to do for a
+   page taller than the viewport (schema, with a real field count) — that
+   layout only ever pushed the footer to the true end of the content, never
+   pinned it while scrolling. Fixed avoids needing any height measurement at
+   all, at the cost of covering content if the page is short — body's own
+   4rem bottom padding is the clearance for that, same as column_mapping. */
+.geomerge-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 3rem;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 2rem;
+  background: var(--color-footer-bg);
+}
+
+/* --- Setup hub (index.html) --- */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  max-width: 700px;
+}
+
+.setup-card {
+  display: block;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  background: var(--color-panel-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  text-decoration: none;
+  color: inherit;
+}
+
+.setup-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.setup-card-disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.setup-card-disabled:hover {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.setup-card-title {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.setup-card-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* --- Schema editor (schema.html) ---
+   Reuses only --ctp-red (already meaningful as "missing/stale" in every
+   status pill elsewhere) for danger language — no new color invented. The
+   nav tab itself stays plain tab-cyan with no red mixed in: tab colors are
+   identity, not status (see nav.css's own comment on that palette). */
+.danger-banner {
+  width: fit-content;
+  max-width: 100%;
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+  border: 1px solid var(--ctp-red);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.field-row {
+  background: var(--color-panel-bg);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+/* A field row currently staged for removal/rename in the unsaved draft,
+   with nonzero usage — computed live client-side, not just at save time. */
+.field-row.is-risky {
+  background: color-mix(in srgb, var(--ctp-red) 8%, var(--color-panel-bg));
+  border: 1px solid var(--ctp-red);
+}
+
+/* Row shape: content on the left (stacked lines — identity/flags, then
+   description, then enum values, then the usage badge), Remove pinned to
+   the top-right of the whole row rather than wrapped in with everything
+   else, which is what made rows feel thrown together at narrower widths. */
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.field-row-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-row-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.field-row .btn-danger {
+  flex-shrink: 0;
+}
+
+.field-row input[type="text"],
+.field-row textarea,
+.field-row select {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.field-row .field-name {
+  width: 220px;
+  font-weight: 600;
+}
+
+.field-row .field-type {
+  width: 110px;
+}
+
+.field-row label.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.field-row .field-description {
+  width: 100%;
+}
+
+.usage-badge {
+  display: inline-block;
+  align-self: flex-start; /* .field-row-content is a column flexbox — without this the pill stretches full-width */
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.usage-badge.is-risky {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+  font-weight: 600;
+}
+
+/* Categories (schema/ccnd.yaml's `categories` — code/label/description per
+   value) get real estate a plain enum-value pill can't hold, so this is
+   collapsed by default: a one-line label summary, expanding into the full
+   per-value editor only when you actually want to work on it. */
+.categories-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.categories-summary-list {
+  color: var(--color-text-secondary);
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--ctp-sapphire);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+.category-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.category-code {
+  width: 160px;
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.category-label {
+  width: 160px;
+}
+
+.category-description {
+  flex: 1;
+  min-width: 160px;
+}
+
+.categories-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.3rem;
+}
+
+button {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--ctp-surface0);
+}
+
+/* Remove-field / remove-enum-value actions — outline style using only
+   --ctp-red, no separate solid fill color invented. */
+.btn-danger {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+  border: 1px solid var(--ctp-red);
+  font-weight: 600;
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  box-shadow: 0 0 0 2px var(--ctp-red) inset;
+}
+
+#add-field-btn {
+  margin-top: 0.5rem;
+}
+
+.save-row {
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Setup's own tab-cyan accent (--ctp-sapphire, see nav.css) for the primary
+   action — same pattern as column_mapping's Prepare-purple Save & next
+   button: solid fill, text is the opposite-extreme neutral (see nav.css's
+   button.found.confirmed comment for why that pairing holds in both
+   themes). */
+#save-btn {
+  padding: 0.45rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: var(--ctp-sapphire);
+  color: var(--color-nav-bg);
+}
+
+#save-btn:hover {
+  filter: brightness(0.92);
+}
+
+.error {
+  color: var(--ctp-red);
+  font-size: 0.85rem;
+}
+
+/* --- Column matching rules (column_matching_rules.html) --- */
+
+.rules-intro {
+  margin-bottom: 1.25rem;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+.target-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--color-panel-bg);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.target-row-content {
+  min-width: 0;
+}
+
+.target-name {
+  font-weight: 600;
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.target-description {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.2rem;
+}
+
+.target-summary {
+  font-size: 0.78rem;
+  color: var(--ctp-green);
+  margin-top: 0.3rem;
+}
+
+.target-summary-empty {
+  color: var(--color-text-secondary);
+}
+
+/* One row per rule term (see /rule-editor.js) — read-only text + a type
+   badge + remove, rather than inline-editable, since renaming a term is
+   just remove-and-re-add; the actual "easily add" ask is the row below. */
+.rule-term-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rule-term-text {
+  flex: 1;
+  min-width: 0;
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-term-type {
+  flex-shrink: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Blue/green/red — a distinct accent per type, not the panel-generic gray
+   the usage-badge/summary text elsewhere uses, since telling exact from
+   contains from excludes at a glance is the whole point of the badge. */
+.rule-term-type-exact {
+  background: color-mix(in srgb, var(--ctp-blue) 20%, var(--color-panel-bg));
+  color: var(--ctp-blue);
+}
+
+.rule-term-type-contains {
+  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
+  color: var(--ctp-green);
+}
+
+.rule-term-type-excludes {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+}
+
+.rule-add-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.rule-add-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+.rule-add-row select {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}

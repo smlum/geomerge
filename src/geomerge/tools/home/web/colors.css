@@ -1,0 +1,93 @@
+/* Shared color palette + light/dark theme switching — loaded on every page
+   via an absolute <link href="/colors.css">, same reasoning as nav.css: one
+   copy instead of duplicating hex values across every tool's own style.css.
+
+   The full Catppuccin palette (catppuccin.com/palette), two flavors used as
+   our light/dark themes: Latte (light, default) and Frappé (dark — chosen
+   over the higher-contrast Macchiato/Mocha as the closer match in feel to
+   Latte's own softness). Raw --ctp-* tokens use Catppuccin's own names
+   directly — every other stylesheet in the app should reference these
+   (accents: rosewater/flamingo/pink/mauve/red/maroon/peach/yellow/green/
+   teal/sky/sapphire/blue/lavender) or the handful of --color-* neutral
+   aliases below, where which neutral fills which UI role isn't obvious from
+   the Catppuccin name alone (e.g. "nav background" -> crust).
+
+   Which flavor is active is driven by [data-theme] on <html>, set by
+   theme.js before first paint (see its own comment for why) and flipped by
+   the toggle button theme.js wires up in the nav. The bare :root block
+   below is both Latte's values AND the no-JS fallback — if theme.js somehow
+   didn't run, the page still renders correctly themed as Latte rather than
+   with undefined custom properties. */
+:root,
+:root[data-theme="light"] {
+  --ctp-rosewater: #dc8a78;
+  --ctp-flamingo: #dd7878;
+  --ctp-pink: #ea76cb;
+  --ctp-mauve: #8839ef;
+  --ctp-red: #d20f39;
+  --ctp-maroon: #e64553;
+  --ctp-peach: #fe640b;
+  --ctp-yellow: #df8e1d;
+  --ctp-green: #40a02b;
+  --ctp-teal: #179299;
+  --ctp-sky: #04a5e5;
+  --ctp-sapphire: #209fb5;
+  --ctp-blue: #1e66f5;
+  --ctp-lavender: #7287fd;
+  --ctp-text: #4c4f69;
+  --ctp-subtext1: #5c5f77;
+  --ctp-subtext0: #6c6f85;
+  --ctp-overlay2: #7c7f93;
+  --ctp-overlay1: #8c8fa1;
+  --ctp-overlay0: #9ca0b0;
+  --ctp-surface2: #acb0be;
+  --ctp-surface1: #bcc0cc;
+  --ctp-surface0: #ccd0da;
+  --ctp-base: #eff1f5;
+  --ctp-mantle: #e6e9ef;
+  --ctp-crust: #dce0e8;
+}
+
+:root[data-theme="dark"] {
+  --ctp-rosewater: #f2d5cf;
+  --ctp-flamingo: #eebebe;
+  --ctp-pink: #f4b8e4;
+  --ctp-mauve: #ca9ee6;
+  --ctp-red: #e78284;
+  --ctp-maroon: #ea999c;
+  --ctp-peach: #ef9f76;
+  --ctp-yellow: #e5c890;
+  --ctp-green: #a6d189;
+  --ctp-teal: #81c8be;
+  --ctp-sky: #99d1db;
+  --ctp-sapphire: #85c1dc;
+  --ctp-blue: #8caaee;
+  --ctp-lavender: #babbf1;
+  --ctp-text: #c6d0f5;
+  --ctp-subtext1: #b5bfe2;
+  --ctp-subtext0: #a5adce;
+  --ctp-overlay2: #949cbb;
+  --ctp-overlay1: #838ba7;
+  --ctp-overlay0: #737994;
+  --ctp-surface2: #626880;
+  --ctp-surface1: #51576d;
+  --ctp-surface0: #414559;
+  --ctp-base: #303446;
+  --ctp-mantle: #292c3c;
+  --ctp-crust: #232634;
+}
+
+/* Semantic neutral aliases. Accents are used directly as --ctp-* elsewhere
+   (the Catppuccin name already says what it's for); these five don't have
+   that luxury, since "which neutral is the nav vs. the page vs. a panel"
+   is a layout decision, not something the color name itself conveys. */
+:root {
+  --color-nav-bg: var(--ctp-crust);
+  --color-footer-bg: var(--ctp-crust);
+  --color-page-bg: var(--ctp-mantle);
+  --color-panel-bg: var(--ctp-base);
+  --color-input-bg: var(--ctp-surface0);
+  --color-text: var(--ctp-text);
+  --color-text-secondary: var(--ctp-subtext0);
+  --color-border: var(--ctp-surface1);
+}

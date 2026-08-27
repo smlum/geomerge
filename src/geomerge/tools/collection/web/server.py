@@ -506,7 +506,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
         out_path = yaml_path_for(source_id)
         if not out_path.exists():
             return jsonify({"error": "not found"}), 404
-        return jsonify({"content": out_path.read_text()})
+        return jsonify({"content": out_path.read_text(), "path": str(out_path.relative_to(repo_root))})
 
     @bp.route("/api/detect_raw/<source_id>")
     def api_detect_raw(source_id):

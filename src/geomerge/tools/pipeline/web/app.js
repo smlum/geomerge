@@ -91,7 +91,15 @@ function render() {
   document.getElementById("progress").textContent = `${completeCount} / ${sources.length} complete`;
 }
 
+// /api/sources recomputes every source's status from scratch on every call
+// (no caching yet) — with real source counts that's several seconds, and an
+// empty table body during that wait looks identical to "there's just
+// nothing here" or a frozen page, not "still loading". This is the whole
+// fix for that: an explicit row + footer text the instant load() starts,
+// not just once data arrives.
 async function load() {
+  document.getElementById("rows-body").innerHTML = '<tr><td colspan="2" class="meta">Loading…</td></tr>';
+  document.getElementById("progress").textContent = "Loading…";
   const res = await fetch("api/sources");
   sources = await res.json();
   render();

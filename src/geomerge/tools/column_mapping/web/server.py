@@ -124,14 +124,19 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "targets": targets,
             "reminder_targets": reminder_targets,
             "columns": columns,
-            "width_unit": saved.get("width_unit", ""),
+            # For map.html's "View source" link — the portal page describing
+            # this dataset (see schema/sources.yaml), so mismatches between a
+            # raw column and what's expected can be checked against the
+            # original listing.
+            "dataset_page_url": metadata.get("dataset_page_url", ""),
+            "flagged": bool(saved.get("flagged", False)),
         })
 
     @bp.route("/api/column_map/<source_id>", methods=["POST"])
     def api_column_map_save(source_id):
         data = request.get_json()
         assignments = data.get("assignments", {})
-        width_unit = (data.get("width_unit") or "").strip()
+        flagged = bool(data.get("flagged", False))
 
         # Guard against a partial/stale submission silently clobbering a good
         # mapping (e.g. a direct API call, or two tabs open on the same source) —
@@ -161,23 +166,33 @@ def create_blueprint(config: dict = None) -> Blueprint:
                         return jsonify({"error": f"assignments don't match the current raw file's columns ({'; '.join(detail)})"}), 400
 
         # Soft-flag collisions can still be saved from a normal edit in progress,
-        # but the final save must have every collision actually resolved.
+        # but a real (non-flagged) save must have every collision actually
+        # resolved. A flagged save is explicitly "I'm skipping this one for
+        # now" — forcing every ambiguous column to be resolved right now would
+        # defeat the point of deferring a complex source to the end.
         target_counts = Counter(target for target in assignments.values() if target)
         collisions = sorted(target for target, count in target_counts.items() if count > 1)
-        if collisions:
+        if collisions and not flagged:
             return jsonify({"error": f"resolve before saving — assigned to more than one column: {', '.join(collisions)}"}), 400
 
         column_map = {name: target for name, target in assignments.items() if target}
         dropped = sorted(name for name, target in assignments.items() if not target)
 
-        out = {"source_id": source_id, "column_map": column_map, "dropped": dropped}
-        if "source_width" in column_map.values() and width_unit:
-            out["width_unit"] = width_unit
+        out = {"source_id": source_id, "column_map": column_map, "dropped": dropped, "flagged": flagged}
 
         out_path = sources_dir / source_id / "column_map.yaml"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as f:
             yaml.dump(out, f, sort_keys=False, allow_unicode=True)
         return jsonify({"ok": True})
+
+    # The raw file text — for geomerge serve's read-only column_map.yaml
+    # preview modal, same pattern as collection's /api/source/<id>/raw.
+    @bp.route("/api/column_map/<source_id>/raw")
+    def api_column_map_get_raw(source_id):
+        out_path = sources_dir / source_id / "column_map.yaml"
+        if not out_path.exists():
+            return jsonify({"error": "not found"}), 404
+        return jsonify({"content": out_path.read_text(), "path": str(out_path.relative_to(repo_root))})
 
     return bp

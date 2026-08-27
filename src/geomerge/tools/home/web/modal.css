@@ -19,7 +19,7 @@
 }
 
 .modal-panel {
-  background: white;
+  background: var(--color-panel-bg);
   border-radius: 6px;
   width: 520px;
   max-height: 85vh;
@@ -47,13 +47,13 @@
   font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
-  color: #888;
+  color: var(--color-text-secondary);
   padding: 0 0.25rem;
   margin: 0;
 }
 
 .modal-close:hover {
-  color: #333;
+  color: var(--color-text);
   background: none;
 }
 

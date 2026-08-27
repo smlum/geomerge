@@ -20,8 +20,7 @@
   gap: 1.5rem;
   padding: 0.9rem 2rem;
   margin: -1.5rem -2rem 1.5rem;
-  background: white;
-  border-bottom: 1px solid #eee;
+  background: var(--color-nav-bg);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -31,13 +30,13 @@
   font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 1.05rem;
   font-weight: 400;
-  color: #1a1a1a;
+  color: var(--color-text);
   text-decoration: none;
   letter-spacing: 0.02em;
 }
 
 .geomerge-brand:hover {
-  color: #555;
+  color: var(--color-text-secondary);
 }
 
 .geomerge-tabs {
@@ -50,60 +49,142 @@
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
   font-size: 0.85rem;
-  color: #666;
+  color: var(--color-text-secondary);
   text-decoration: none;
 }
 
 .geomerge-tab:hover {
-  color: #1a1a1a;
-  background: #f2f2f2;
+  color: var(--color-text);
+  background: var(--ctp-surface0);
 }
 
 .geomerge-tab.active {
-  color: #1a1a1a;
+  color: var(--color-text);
   font-weight: 600;
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
 }
 
-/* A small pastel palette for tab identity, kept deliberately distinct from
+/* A small accent palette for tab identity, kept deliberately distinct from
    the status-badge palette (green/yellow/red — those mean complete/warning/
    missing) so a colored tab never reads as a status. Six here, two in use
    (Home, Collection) — the rest are ready for Tools/Pipeline/etc. as they
    become tabs. Each color shows on hover too (a preview of that tab's
    identity) as well as when active — hover doesn't get the bold weight,
-   so it still reads as "not the current page". */
+   so it still reads as "not the current page".
+
+   Background is the accent mixed into the page's own panel color rather
+   than a separate hardcoded pastel per tab per theme — one accent value
+   (--ctp-blue etc., already themed for Latte/Frappé in colors.css) makes
+   both the tint and the text color correct in both themes, instead of
+   needing a light-mode pastel AND a dark-mode pastel maintained by hand for
+   each of twelve cells. */
 .geomerge-tab.active.tab-blue,
 .geomerge-tab.tab-blue:hover {
-  background: #e4ebfa;
-  color: #3a5a94;
+  background: color-mix(in srgb, var(--ctp-blue) 18%, var(--color-panel-bg));
+  color: var(--ctp-blue);
 }
 
 .geomerge-tab.active.tab-peach,
 .geomerge-tab.tab-peach:hover {
-  background: #fbe9dd;
-  color: #a35a28;
+  background: color-mix(in srgb, var(--ctp-peach) 18%, var(--color-panel-bg));
+  color: var(--ctp-peach);
 }
 
 .geomerge-tab.active.tab-purple,
 .geomerge-tab.tab-purple:hover {
-  background: #ede4fa;
-  color: #6b3fa0;
+  background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
+  color: var(--ctp-mauve);
 }
 
 .geomerge-tab.active.tab-teal,
 .geomerge-tab.tab-teal:hover {
-  background: #dff5f0;
-  color: #1f7a63;
+  background: color-mix(in srgb, var(--ctp-teal) 18%, var(--color-panel-bg));
+  color: var(--ctp-teal);
 }
 
 .geomerge-tab.active.tab-pink,
 .geomerge-tab.tab-pink:hover {
-  background: #fbe4ee;
-  color: #a13a6e;
+  background: color-mix(in srgb, var(--ctp-pink) 18%, var(--color-panel-bg));
+  color: var(--ctp-pink);
 }
 
 .geomerge-tab.active.tab-cyan,
 .geomerge-tab.tab-cyan:hover {
-  background: #dff3f8;
-  color: #1f6f85;
+  background: color-mix(in srgb, var(--ctp-sapphire) 18%, var(--color-panel-bg));
+  color: var(--ctp-sapphire);
+}
+
+/* Sliding pill switch, pushed to the far right of the nav — click calls
+   toggleTheme() (see theme.js). The icon rides inside the knob (swapped by
+   [data-theme], same as every color in the app) rather than sitting fixed
+   in the track — a fixed-icon track was tried first and looked cluttered,
+   the two icons' glyph bounds overlapping the knob at this control's size. */
+.theme-toggle {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.theme-toggle-track {
+  position: relative;
+  display: block;
+  width: 3.6rem;
+  height: 2rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--ctp-surface0);
+  transition: background 0.15s ease;
+}
+
+.theme-toggle:hover .theme-toggle-track {
+  background: var(--ctp-surface1);
+}
+
+/* Color emoji glyphs render noticeably larger than their nominal font-size
+   box (varies by OS/font, but consistently oversized) — the knob is sized
+   with that headroom built in, and overflow: hidden is just a safety clip
+   rather than something that should ever actually need to crop. */
+.theme-toggle-knob {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-panel-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+}
+
+:root[data-theme="dark"] .theme-toggle-knob {
+  transform: translateX(1.6rem);
+}
+
+.theme-toggle-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Shows the icon for what clicking will switch TO, not the current state
+   — light mode shows the moon (click to go dark), dark mode shows the sun
+   (click to go light). */
+.theme-toggle-sun {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle-sun {
+  display: flex;
+}
+
+:root[data-theme="dark"] .theme-toggle-moon {
+  display: none;
 }

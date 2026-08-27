@@ -13,6 +13,7 @@ actually have open.
 Usage:
     geomerge serve
 Then open http://localhost:8640
+    http://localhost:8640/setup/
     http://localhost:8640/collection/
     http://localhost:8640/prep/
     http://localhost:8640/pipeline/
@@ -35,6 +36,7 @@ from geomerge.tools.column_mapping.status import source_status as column_mapping
 from geomerge.tools.column_mapping.web.server import create_blueprint as create_column_mapping_blueprint
 from geomerge.tools.pipeline.web.server import create_blueprint as create_pipeline_tab_blueprint
 from geomerge.tools.prep.web.server import create_blueprint as create_prep_blueprint
+from geomerge.tools.setup.web.server import create_blueprint as create_setup_blueprint
 from geomerge.tools.validate.web.server import create_blueprint as create_validate_blueprint
 
 
@@ -44,6 +46,8 @@ def create_app(config: dict = None) -> Flask:
     sources_dir = repo_root / config["sources_dir"]
 
     app = Flask(__name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    # Project-level, not per-source — no status.py, no /api/sources entry below.
+    app.register_blueprint(create_setup_blueprint(config), url_prefix="/setup")
     app.register_blueprint(create_collection_blueprint(config), url_prefix="/collection")
     app.register_blueprint(create_prep_blueprint(config), url_prefix="/prep")
     app.register_blueprint(create_pipeline_tab_blueprint(config), url_prefix="/pipeline")
@@ -87,6 +91,10 @@ def create_app(config: dict = None) -> Flask:
                 "collection": {
                     "metadata": source_metadata_status(source_id, config),
                     "raw": source_raw_data_status(source_id, config),
+                    # For the raw pill's info modal (app.js) — reuses
+                    # column_mapping_status's own read of metadata.yaml rather
+                    # than a second one, since cm is already computed above.
+                    "raw_filename": cm["raw_filename"],
                 },
                 # tools/ (displayed as "Prep") — human-reviewed decisions
                 # needed before the rest of the pipeline can run, plus

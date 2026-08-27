@@ -2,8 +2,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
   padding: 1.5rem 2rem 4rem;
-  color: #1a1a1a;
-  background: #fafafa;
+  color: var(--color-text);
+  background: var(--color-page-bg);
 }
 
 *, *::before, *::after {
@@ -19,23 +19,27 @@ header {
   position: sticky;
   top: var(--nav-height, 50px);
   z-index: 2;
-  background: #fafafa;
-  box-shadow: 0 1px 0 #fafafa;
+  background: var(--color-page-bg);
+  box-shadow: 0 1px 0 var(--color-page-bg);
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
 }
 
 .toggle {
   font-size: 0.9rem;
-  color: #444;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
+/* Departure Mono (see nav.css's @font-face, loaded on this page) — matches
+   the brand mark's pixel-mono look for this "what's on screen" status text,
+   instead of the body's plain sans-serif. */
 .meta {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
-  color: #888;
+  color: var(--color-text-secondary);
 }
 
 /* Sticks to the bottom of the viewport, same idea as the nav bar at the
@@ -52,8 +56,7 @@ header {
   z-index: 5;
   margin: 1.5rem -2rem -4rem;
   padding: 0 2rem;
-  background: white;
-  border-top: 1px solid #eee;
+  background: var(--color-footer-bg);
 }
 
 /* A fixed height, not max-height: needs to fill the remaining viewport even
@@ -72,13 +75,13 @@ table {
   width: 100%;
   min-width: 500px;
   border-collapse: collapse;
-  background: white;
+  background: var(--color-panel-bg);
 }
 
 th, td {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
   font-size: 0.9rem;
   white-space: nowrap;
@@ -97,7 +100,7 @@ thead {
 }
 
 th {
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
 }
 
 .name {
@@ -116,36 +119,31 @@ td a {
   font-weight: 600;
 }
 
-.status-not_started {
-  background: #f2f2f2;
-  color: #777;
+.status-not_started,
+.status-not_applicable,
+.status-not_built {
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
 }
 
-.status-not_applicable {
-  background: #f2f2f2;
-  color: #aaa;
+.status-not_built {
+  font-style: italic;
 }
 
 .status-needs_review,
 .status-not_complete {
-  background: #fdf1d6;
-  color: #9a7318;
-}
-
-.status-complete {
-  background: #e3f3e3;
-  color: #2c662c;
+  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
 }
 
 .status-stale {
-  background: #fbe4e4;
-  color: #a13a3a;
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
 }
 
-.status-not_built {
-  background: #f2f2f2;
-  color: #bbb;
-  font-style: italic;
+.status-complete {
+  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
+  color: var(--ctp-green);
 }
 
 .status.copyable {
@@ -165,11 +163,11 @@ td a {
   font-size: 0.85rem;
   border: none;
   background: none;
-  color: #999;
+  color: var(--color-text-secondary);
   cursor: pointer;
   vertical-align: middle;
 }
 
 .refresh-btn:hover {
-  color: #555;
+  color: var(--color-text);
 }

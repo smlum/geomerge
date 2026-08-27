@@ -2,8 +2,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
   padding: 1.5rem 2rem 4rem;
-  color: #1a1a1a;
-  background: #fafafa;
+  color: var(--color-text);
+  background: var(--color-page-bg);
 }
 
 header {
@@ -15,13 +15,13 @@ header {
   /* Sticks right below the sticky nav bar above it, not at the very top. */
   top: var(--nav-height, 50px);
   z-index: 2;
-  background: #fafafa;
+  background: var(--color-page-bg);
   /* Papers over a sub-pixel seam some browsers show at a sticky element's
      edge during scroll (the header's real height is fractional, e.g.
      53.39px, but gets measured/rounded to a whole pixel elsewhere) — same
      color as the header itself, so it's invisible except for sealing that
      hairline gap. */
-  box-shadow: 0 1px 0 #fafafa;
+  box-shadow: 0 1px 0 var(--color-page-bg);
   /* Safari specifically fails to repaint a sticky element's exact boundary
      pixel cleanly during scroll compositing (a known WebKit bug, not
      present in Chrome) — forcing it onto its own GPU layer fixes it. */
@@ -30,18 +30,18 @@ header {
 }
 
 #progress {
-  color: #555;
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 .found-count {
-  color: #2c662c;
+  color: var(--ctp-green);
   font-weight: 600;
 }
 
 .toggle {
   font-size: 0.9rem;
-  color: #444;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -69,8 +69,7 @@ header {
   z-index: 5;
   margin: 1.5rem -2rem -4rem;
   padding: 0 2rem;
-  background: white;
-  border-top: 1px solid #eee;
+  background: var(--color-footer-bg);
 }
 
 .geomerge-footer #add-source-btn {
@@ -103,13 +102,13 @@ table {
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
-  background: white;
+  background: var(--color-panel-bg);
 }
 
 th, td {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
   font-size: 0.9rem;
   overflow: hidden;
@@ -120,7 +119,7 @@ th, td {
 }
 
 th {
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -128,37 +127,39 @@ th {
      right above the sticky header (fractional scroll positions during
      scroll don't always land on a whole pixel) — paints an extra pixel
      above th's own top edge in its own background color. */
-  box-shadow: 0 -1px 0 #f0f0f0;
+  box-shadow: 0 -1px 0 var(--ctp-surface0);
   /* Same Safari-specific sticky repaint bug as the page header above. */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
 }
 
+/* Row tints are a lighter mix than the status pills (10% vs. 20%) — a whole
+   row shouldn't compete with the pill/text sitting on top of it. */
 tr.done {
-  background: #f4fbf4;
-  color: #6b8b6b;
+  background: color-mix(in srgb, var(--ctp-green) 10%, var(--color-panel-bg));
+  color: var(--ctp-green);
 }
 
 tr.done a {
-  color: #7fa87f;
+  color: var(--ctp-green);
 }
 
 tr.done.not-found-row {
-  background: #f2f2f2;
-  color: #777;
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
 }
 
 tr.done.not-found-row a {
-  color: #888;
+  color: var(--color-text-secondary);
 }
 
 tr.done.pending-metadata {
-  background: #fdf6e3;
-  color: #9a7318;
+  background: color-mix(in srgb, var(--ctp-yellow) 10%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
 }
 
 tr.done.pending-metadata a {
-  color: #ad8626;
+  color: var(--ctp-yellow);
 }
 
 .name-link {
@@ -182,9 +183,13 @@ tr.done.pending-metadata a {
   background: none;
 }
 
+/* Departure Mono (see nav.css's @font-face, loaded on this page) — matches
+   the brand mark's pixel-mono look for this "what's on screen" status text,
+   instead of the body's plain sans-serif. */
 .meta {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.78rem;
-  color: #888;
+  color: var(--color-text-secondary);
   font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
@@ -206,24 +211,26 @@ tr.done.pending-metadata a {
   flex-shrink: 0;
   padding: 0.3rem 0.5rem;
   font-size: 0.8rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: white;
-  color: #333;
+  background: var(--color-panel-bg);
+  color: var(--color-text);
   text-decoration: none;
   white-space: nowrap;
 }
 
 .open-link:hover {
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
 }
 
 input[type="text"] {
   width: 100%;
   padding: 0.3rem 0.4rem;
   font-size: 0.85rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
 }
 
 .flag-cell {
@@ -239,7 +246,7 @@ input[type="text"] {
    stacking multiple classes) — flagged is "needs my attention" and should
    never be silently masked by whatever other tint the row already has. */
 tr.flagged-row {
-  background: #fff9e6 !important;
+  background: color-mix(in srgb, var(--ctp-yellow) 15%, var(--color-panel-bg)) !important;
 }
 
 textarea.notes-input {
@@ -251,14 +258,16 @@ textarea.notes-input {
   white-space: nowrap;
   font: inherit;
   line-height: 1.3;
+  color: var(--color-text);
   border-color: transparent;
   background: transparent;
 }
 
 textarea.notes-input:hover,
 textarea.notes-input:focus {
-  border-color: #ccc;
-  background: white;
+  border-color: var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
 }
 
 /* Only while actually editing — wraps to show the full note, growing the
@@ -276,51 +285,56 @@ button {
   padding: 0.3rem 0.5rem;
   font-size: 0.8rem;
   border-radius: 4px;
-  border: 1px solid #ccc;
-  background: white;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text);
   cursor: pointer;
   margin-right: 0.25rem;
 }
 
 button.found {
-  border-color: #4a8f4a;
-  color: #2c662c;
+  border-color: var(--ctp-green);
+  color: var(--ctp-green);
 }
 
 button.found:hover {
-  background: #eaf6ea;
+  background: color-mix(in srgb, var(--ctp-green) 15%, var(--color-panel-bg));
 }
 
+/* Confirmed state fills solid with the accent — text is the nav/footer
+   neutral (crust), which sits at whichever extreme is opposite the accent's
+   own lightness in each theme (dark crust vs. Latte's saturated green,
+   light crust vs. Frappé's pastel green), so contrast holds in both. */
 button.found.confirmed {
-  background: #2c662c;
-  color: white;
+  background: var(--ctp-green);
+  color: var(--color-nav-bg);
 }
 
 button.found.confirmed:hover {
-  background: #24521f;
+  filter: brightness(0.92);
 }
 
 button.not-found {
-  border-color: #999;
-  color: #555;
+  border-color: var(--ctp-overlay0);
+  color: var(--color-text-secondary);
 }
 
 button.not-found:hover {
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
 }
 
 button.not-found.confirmed {
-  background: #555;
-  color: white;
-  border-color: #555;
+  background: var(--color-text-secondary);
+  color: var(--color-nav-bg);
+  border-color: var(--color-text-secondary);
 }
 
 button.not-found.confirmed:hover {
-  background: #444;
+  filter: brightness(0.92);
 }
 
 .error {
-  color: #b23b3b;
+  color: var(--ctp-red);
   font-size: 0.78rem;
   white-space: normal;
   margin-top: 0.2rem;
@@ -340,29 +354,29 @@ button.not-found.confirmed:hover {
 }
 
 .status-missing {
-  background: #f2f2f2;
-  color: #777;
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
 }
 
 .status-partial {
-  background: #fdf1d6;
-  color: #9a7318;
+  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
 }
 
 .status-complete {
-  background: #e3f3e3;
-  color: #2c662c;
+  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
+  color: var(--ctp-green);
 }
 
 button.metadata-btn {
-  border-color: #ccc;
-  color: #333;
+  border-color: var(--color-border);
+  color: var(--color-text);
 }
 
 .source-block {
   padding-top: 0.75rem;
   margin-top: 0.75rem;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--color-border);
 }
 
 .source-block:first-child {
@@ -389,12 +403,12 @@ button.metadata-btn {
 
 .remove-source-btn {
   font-size: 0.78rem;
-  color: #a13a3a;
-  border-color: #e2b8b8;
+  color: var(--ctp-red);
+  border-color: color-mix(in srgb, var(--ctp-red) 35%, var(--color-panel-bg));
 }
 
 .remove-source-btn:hover {
-  background: #fbe4e4;
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
 }
 
 #add-another-source-btn {
@@ -417,21 +431,22 @@ button.metadata-btn {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.8rem;
-  color: #555;
+  color: var(--color-text-secondary);
 }
 
 .edit-form input,
 .edit-form select {
   font-size: 0.9rem;
   padding: 0.4rem 0.5rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: white;
+  background: var(--color-input-bg);
+  color: var(--color-text);
 }
 
 .edit-form input.required-empty,
 .edit-form select.required-empty {
-  border-color: #c0392b;
+  border-color: var(--ctp-red);
 }
 
 .field-row {
@@ -456,7 +471,7 @@ button.metadata-btn {
   gap: 0.3rem;
   flex: 0 0 auto;
   font-size: 0.8rem;
-  color: #555;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 

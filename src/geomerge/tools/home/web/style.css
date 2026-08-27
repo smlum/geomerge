@@ -2,17 +2,21 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
   padding: 1.5rem 2rem 4rem;
-  color: #1a1a1a;
-  background: #fafafa;
+  color: var(--color-text);
+  background: var(--color-page-bg);
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
+/* Departure Mono (see nav.css's @font-face, loaded on this page) — matches
+   the brand mark's pixel-mono look for this "what's on screen" status text,
+   instead of the body's plain sans-serif. */
 .meta {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
-  color: #888;
+  color: var(--color-text-secondary);
 }
 
 /* Sticks right below the sticky nav bar above it, not at the very top —
@@ -24,11 +28,11 @@ header {
   position: sticky;
   top: var(--nav-height, 50px);
   z-index: 2;
-  background: #fafafa;
+  background: var(--color-page-bg);
   /* Papers over a sub-pixel seam some browsers show at a sticky element's
      edge during scroll — same color as the header itself, so it's
      invisible except for sealing that hairline gap. */
-  box-shadow: 0 1px 0 #fafafa;
+  box-shadow: 0 1px 0 var(--color-page-bg);
   /* Safari specifically fails to repaint a sticky element's exact boundary
      pixel cleanly during scroll compositing (a known WebKit bug, not
      present in Chrome) — forcing it onto its own GPU layer fixes it. */
@@ -38,7 +42,7 @@ header {
 
 .toggle {
   font-size: 0.9rem;
-  color: #444;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -58,8 +62,7 @@ header {
   z-index: 5;
   margin: 1.5rem -2rem -4rem;
   padding: 0 2rem;
-  background: white;
-  border-top: 1px solid #eee;
+  background: var(--color-footer-bg);
 }
 
 /* A fixed height, not max-height: this needs to fill the remaining
@@ -81,13 +84,13 @@ table {
   width: 100%;
   min-width: 700px;
   border-collapse: collapse;
-  background: white;
+  background: var(--color-panel-bg);
 }
 
 th, td {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
   font-size: 0.9rem;
   white-space: nowrap;
@@ -110,7 +113,7 @@ thead {
 }
 
 th {
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
 }
 
 .refresh-btn {
@@ -122,7 +125,7 @@ th {
   font-size: 0.85rem;
   border: none;
   background: none;
-  color: #999;
+  color: var(--color-text-secondary);
   cursor: pointer;
   text-transform: none;
   letter-spacing: normal;
@@ -130,7 +133,7 @@ th {
 }
 
 .refresh-btn:hover {
-  color: #555;
+  color: var(--color-text);
 }
 
 /* Divides the collection/ group (finding + landing raw data) from the
@@ -138,7 +141,7 @@ th {
    run) from the pipeline/ group (mechanical, no review UI) — a deliberate
    distinction in how the project's built, not just a visual one. */
 .group-boundary {
-  border-left: 2px solid #ddd;
+  border-left: 2px solid var(--ctp-surface2);
 }
 
 .name {
@@ -157,46 +160,39 @@ td a {
   font-weight: 600;
 }
 
-.status-not_started {
-  background: #f2f2f2;
-  color: #777;
-}
-
-.status-not_applicable {
-  background: #f2f2f2;
-  color: #aaa;
-}
-
-.status-missing {
-  background: #fbe4e4;
-  color: #a13a3a;
-}
-
-.status-partial {
-  background: #fdf1d6;
-  color: #9a7318;
-}
-
-.status-needs_review,
-.status-not_complete {
-  background: #fdf1d6;
-  color: #9a7318;
-}
-
-.status-complete {
-  background: #e3f3e3;
-  color: #2c662c;
-}
-
-.status-stale {
-  background: #fbe4e4;
-  color: #a13a3a;
+/* Status colors are the accent mixed into the panel background rather than
+   a separate hardcoded pastel per status per theme (see nav.css's tab
+   colors for the same pattern and rationale) — one --ctp-green/-yellow/-red
+   value, already themed for Latte/Frappé in colors.css, gives a correct
+   tint+text pair in both themes instead of needing light- and dark-mode
+   pastels hand-tuned for every status. */
+.status-not_started,
+.status-not_applicable,
+.status-not_built {
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
 }
 
 .status-not_built {
-  background: #f2f2f2;
-  color: #bbb;
   font-style: italic;
+}
+
+.status-missing,
+.status-stale {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+}
+
+.status-partial,
+.status-needs_review,
+.status-not_complete {
+  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
+}
+
+.status-complete {
+  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
+  color: var(--ctp-green);
 }
 
 .status.copyable {
@@ -207,12 +203,16 @@ td a {
   filter: brightness(0.92);
 }
 
-/* A read-only, monochrome preview of the actual metadata.yaml file — plain
-   monospace text, no syntax highlighting, so it reads as "here's the file"
-   rather than a second editing surface competing with the real one. */
+/* A read-only preview of a source's actual YAML file (metadata.yaml,
+   column_map.yaml, classification_map.yaml — see app.js's YAML_PREVIEWS),
+   syntax-highlighted via highlight.js (vendored in assets/vendor/highlightjs/)
+   so it reads as "here's the file" rather than a second editing surface
+   competing with the real one. The .hljs override keeps the vendored
+   GitHub-light theme's token colors but matches our own panel background
+   instead of its white. */
 .code-block {
-  background: #f5f5f5;
-  color: #333;
+  background: var(--color-panel-bg);
+  color: var(--color-text);
   border-radius: 4px;
   padding: 0.75rem 1rem;
   margin: 0;
@@ -225,18 +225,50 @@ td a {
   overflow: auto;
 }
 
+.code-block.hljs {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+}
+
+/* The title block stacks the source name over a light path/filename
+   subheader (see #yaml-modal-path, styled by .meta above) instead of just
+   the name — modal-header's own align-items: center (see modal.css) then
+   centers this whole two-line block against the close button beside it. */
+.modal-title-block {
+  min-width: 0;
+}
+
+#yaml-modal-path {
+  margin-top: 0.15rem;
+  word-break: break-all;
+}
+
+/* Same corner radius and pastel-on-tint language as nav.css's .geomerge-tab
+   — a flat corporate button felt out of place here. Color is per YAML kind
+   (see app.js's YAML_PREVIEWS "accent"), matching the nav tab that owns
+   that file: metadata -> Collect (tab-peach), column_map/classification_map
+   -> Prepare (tab-purple, the dedicated tab for both stages — see prep/'s
+   server.py docstring). */
 .edit-btn {
   display: inline-block;
   padding: 0.4rem 0.9rem;
-  background: #2c5aa0;
-  color: white;
-  border-radius: 4px;
+  border-radius: 6px;
   text-decoration: none;
   font-size: 0.85rem;
   font-weight: 600;
 }
 
 .edit-btn:hover {
-  background: #234a85;
+  filter: brightness(0.95);
+}
+
+.edit-btn-peach {
+  background: color-mix(in srgb, var(--ctp-peach) 18%, var(--color-panel-bg));
+  color: var(--ctp-peach);
+}
+
+.edit-btn-purple {
+  background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
+  color: var(--ctp-mauve);
 }
 

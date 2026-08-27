@@ -5,6 +5,8 @@
   <title>collect</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+  <link rel="stylesheet" href="/colors.css" />
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/nav.css" />
   <link rel="stylesheet" href="/table.css" />
   <link rel="stylesheet" href="/modal.css" />
@@ -15,11 +17,20 @@
     <a href="/" class="geomerge-brand">geomerge</a>
     <div class="geomerge-tabs">
       <a href="/" class="geomerge-tab tab-blue">Home</a>
+      <a href="/setup/" class="geomerge-tab tab-cyan">Setup</a>
       <a href="/collection/" class="geomerge-tab active tab-peach">Collect</a>
       <a href="/prep/" class="geomerge-tab tab-purple">Prepare</a>
       <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
       <a href="/validate/" class="geomerge-tab tab-pink">Validate</a>
     </div>
+      <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-knob">
+            <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
+            <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
+          </span>
+        </span>
+      </button>
   </nav>
   <header>
     <label class="toggle">
@@ -65,6 +76,7 @@
   </div>
   <footer class="geomerge-footer">
     <span id="checklist-path" class="meta"></span>
+    <span class="meta">&middot;</span>
     <span id="progress" class="meta"></span>
     <button id="add-source-btn" type="button">+ Add provider</button>
   </footer>

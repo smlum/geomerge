@@ -1,0 +1,46 @@
+/* Replaces the vendored highlight.js theme (github-light.min.css) with a
+   theme-aware one of our own — that vendored theme hardcodes light-mode
+   colors (e.g. #032f62 for strings) that read fine on a white background
+   but are close to illegible on Frappé's dark panel. highlight.js itself
+   (highlight.min.js, still loaded — see index.html) only tokenizes text
+   into .hljs-* spans; the actual colors are a separate, swappable
+   stylesheet, so we only need to replace *this* file, not the tokenizer.
+
+   Base text/background (.hljs, .code-block) are already themed via
+   --color-text/--color-panel-bg in style.css. This file only needs to
+   cover the token classes YAML actually produces (checked against the
+   real vendored highlight.min.js against our own metadata.yaml/column_map
+   .yaml content): hljs-attr (keys), hljs-string (both quoted and plain
+   scalar values), hljs-number, hljs-literal (true/false/null),
+   hljs-bullet (list "-"), hljs-comment. Any other language's token class
+   that might theoretically show up here just falls back to the base
+   .hljs text color instead of an unstyled black — safe, not broken.
+
+   Mapping follows the convention most Catppuccin editor ports use for
+   these same roles (comments always Overlay/Subtext + italic; strings
+   Green; keys/properties Blue), so it reads as "Catppuccin" rather than
+   an arbitrary reassignment. */
+.hljs-attr {
+  color: var(--ctp-blue);
+}
+
+.hljs-string {
+  color: var(--ctp-green);
+}
+
+.hljs-number {
+  color: var(--ctp-peach);
+}
+
+.hljs-literal {
+  color: var(--ctp-mauve);
+}
+
+.hljs-bullet {
+  color: var(--color-text-secondary);
+}
+
+.hljs-comment {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}

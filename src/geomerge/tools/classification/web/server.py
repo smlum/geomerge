@@ -101,11 +101,20 @@ def create_blueprint(config: dict = None) -> Blueprint:
         return match_name(primary_value, rules)
 
     def target_options(target: str):
+        # ccnd.yaml's categorical fields are schema/ccnd.yaml's `categories`
+        # (a list of {code, label, description} — see geomerge.tools.setup),
+        # not a bare list of strings — the review UI still just wants the
+        # codes (what's actually saved to classification_map.yaml), so this
+        # unpacks that shape rather than showing every source_column/tool a
+        # richer object it doesn't need.
         try:
             field = get_field(target_schema_path, target)
         except ValueError:
             return None
-        return field.get("enum")
+        categories = field.get("categories")
+        if categories is None:
+            return None
+        return [c["code"] for c in categories]
 
     # No list-of-sources page here — geomerge serve's table replaced it and
     # links straight into review.html for a given source. / just bounces
@@ -259,5 +268,14 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "points": points[:n_samples],
             "spare_points": points[n_samples:],
         })
+
+    # The raw file text — for geomerge serve's read-only classification_map.yaml
+    # preview modal, same pattern as collection's /api/source/<id>/raw.
+    @bp.route("/api/classification/<source_id>/raw")
+    def api_classification_get_raw(source_id):
+        path = classification_map_path(source_id)
+        if not path.exists():
+            return jsonify({"error": "not found"}), 404
+        return jsonify({"content": path.read_text(), "path": str(path.relative_to(repo_root))})
 
     return bp

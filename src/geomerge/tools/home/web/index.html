@@ -5,21 +5,33 @@
   <title>geomerge</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+  <link rel="stylesheet" href="/colors.css" />
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/nav.css" />
   <link rel="stylesheet" href="/table.css" />
   <link rel="stylesheet" href="/modal.css" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/hljs-theme.css" />
 </head>
 <body>
   <nav class="geomerge-nav">
     <a href="/" class="geomerge-brand">geomerge</a>
     <div class="geomerge-tabs">
       <a href="/" class="geomerge-tab active tab-blue">Home</a>
+      <a href="/setup/" class="geomerge-tab tab-cyan">Setup</a>
       <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
       <a href="/prep/" class="geomerge-tab tab-purple">Prepare</a>
       <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
       <a href="/validate/" class="geomerge-tab tab-pink">Validate</a>
     </div>
+      <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-knob">
+            <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
+            <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
+          </span>
+        </span>
+      </button>
   </nav>
   <header>
     <label class="toggle">
@@ -58,19 +70,37 @@
     <span id="summary" class="meta"></span>
   </footer>
 
-  <div id="metadata-modal" class="modal-overlay hidden">
+  <div id="yaml-modal" class="modal-overlay hidden">
     <div class="modal-panel">
       <div class="modal-header">
-        <h2 id="metadata-modal-title"></h2>
-        <button id="metadata-modal-close" class="modal-close" type="button">&times;</button>
+        <div class="modal-title-block">
+          <h2 id="yaml-modal-title"></h2>
+          <div id="yaml-modal-path" class="meta"></div>
+        </div>
+        <button id="yaml-modal-close" class="modal-close" type="button">&times;</button>
       </div>
-      <pre id="metadata-modal-content" class="code-block"></pre>
+      <pre id="yaml-modal-content" class="code-block hljs"></pre>
       <div class="modal-actions">
-        <a id="metadata-modal-edit" class="edit-btn" href="#">Edit</a>
+        <a id="yaml-modal-edit" class="edit-btn" href="#">Edit</a>
       </div>
     </div>
   </div>
 
+  <!-- Just the source id + where its raw file lives on disk — no YAML to
+       preview (it's whatever raw dataset format the source landed in, not a
+       geomerge-owned file) and nothing to edit, so this is a plain info
+       modal rather than yamlPreviewCell's fetch-and-highlight pattern. -->
+  <div id="raw-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="raw-modal-title"></h2>
+        <button id="raw-modal-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="raw-modal-path" class="code-block"></div>
+    </div>
+  </div>
+
+  <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -5,18 +5,48 @@
   <title>Column map</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+  <link rel="stylesheet" href="/colors.css" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/nav.css" />
+  <link rel="stylesheet" href="/table.css" />
+  <link rel="stylesheet" href="/modal.css" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/hljs-theme.css" />
 </head>
 <body>
+  <nav class="geomerge-nav">
+    <a href="/" class="geomerge-brand">geomerge</a>
+    <div class="geomerge-tabs">
+      <a href="/" class="geomerge-tab tab-blue">Home</a>
+      <a href="/setup/" class="geomerge-tab tab-cyan">Setup</a>
+      <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
+      <a href="/prep/" class="geomerge-tab active tab-purple">Prepare</a>
+      <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
+      <a href="/validate/" class="geomerge-tab tab-pink">Validate</a>
+    </div>
+      <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-knob">
+            <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
+            <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
+          </span>
+        </span>
+      </button>
+  </nav>
   <header>
     <div class="title-block">
-      <div class="tool-label">Column map</div>
-      <h1 id="title"></h1>
-      <div id="raw-path" class="meta"></div>
-      <div id="output-path" class="meta"></div>
+      <h1>Column mapping</h1>
+      <div id="source-label" class="meta source-label"></div>
+      <span id="flag-badge" class="flag-badge hidden">&#9873; Flagged — revisit later</span>
+      <div id="file-paths" class="meta file-paths"></div>
+      <div class="meta rules-line">
+        Applying rules from: <code>column_matching_rules.yaml</code> —
+        <button type="button" id="rules-edit-link" class="link-btn">Edit</button>
+      </div>
     </div>
-    <a href="/" class="back-link">&larr; Home</a>
+    <a id="source-link" class="source-link hidden" href="#" target="_blank" rel="noopener">View source &#8599;</a>
   </header>
+
   <div class="table-scroll">
     <table id="rows">
       <colgroup>
@@ -43,20 +73,79 @@
 
   <div id="missing-targets" class="missing-targets hidden"></div>
 
-  <div id="width-unit-row" class="width-unit-row hidden">
-    <label>
-      Width unit (for source_width columns)
-      <input type="text" id="width-unit" placeholder="e.g. m, ft" />
-    </label>
-  </div>
-
   <div class="save-row">
     <button id="save-next-btn">Save &amp; next</button>
     <button id="save-back-btn">Save &amp; back to home</button>
-    <span id="save-status" class="meta"></span>
+    <button id="flag-next-btn" type="button">&#9873; Flag &amp; next</button>
   </div>
 
+  <footer class="geomerge-footer">
+    <button type="button" id="footer-file-link" class="footer-file-link meta"></button>
+    <span class="meta">&middot;</span>
+    <span id="mapped-count" class="meta"></span>
+    <span id="save-status" class="meta"></span>
+  </footer>
+
+  <div id="rules-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="rules-modal-title">Column matching rules</h2>
+        <button id="rules-modal-close" class="modal-close" type="button">&times;</button>
+      </div>
+
+      <div id="rules-list-view">
+        <div class="meta rules-intro">
+          First-pass suggestions when mapping a raw column to a target field — an <strong>exact</strong>
+          term only matches a raw column name equal to it; a <strong>contains</strong> term matches equal
+          or substring, either direction.
+        </div>
+        <div id="rules-targets-body"></div>
+      </div>
+
+      <div id="rules-edit-view" class="hidden">
+        <button type="button" id="rules-back-btn" class="link-btn">&larr; All targets</button>
+        <div id="rule-terms-body"></div>
+        <div class="rule-add-row">
+          <input type="text" id="rule-new-term" placeholder="raw column name or term" />
+          <select id="rule-new-type">
+            <option value="exact">Exact</option>
+            <option value="contains" selected>Contains</option>
+            <option value="excludes">Excludes</option>
+          </select>
+          <button type="button" id="rule-add-btn">+ Add</button>
+        </div>
+        <div class="modal-actions">
+          <button id="rule-save-btn">Save</button>
+          <span id="rule-save-status" class="meta"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="file-preview-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2 id="file-preview-title"></h2>
+          <div id="file-preview-path" class="meta"></div>
+        </div>
+        <button id="file-preview-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <pre id="file-preview-content" class="code-block hljs"></pre>
+    </div>
+  </div>
+
+  <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+  <script src="/file-preview.js"></script>
   <script src="/nav.js"></script>
+  <script src="/rule-editor.js"></script>
   <script src="map.js"></script>
+  <script src="rules-modal.js"></script>
+  <script>
+    document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
+    document.getElementById("file-preview-modal").addEventListener("click", (e) => {
+      if (e.target.id === "file-preview-modal") closeFilePreview();
+    });
+  </script>
 </body>
 </html>

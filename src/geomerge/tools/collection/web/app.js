@@ -17,6 +17,8 @@ async function loadMeta() {
 }
 
 async function loadRows() {
+  document.getElementById("rows-body").innerHTML = '<tr><td colspan="8" class="meta">Loading…</td></tr>';
+  document.getElementById("progress").textContent = "Loading…";
   const res = await fetch("api/rows");
   rows = await res.json();
   render();

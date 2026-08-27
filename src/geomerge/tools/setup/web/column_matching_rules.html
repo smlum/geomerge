@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Column matching rules</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+  <link rel="stylesheet" href="/colors.css" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/nav.css" />
+  <link rel="stylesheet" href="/modal.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/hljs-theme.css" />
+</head>
+<body>
+  <nav class="geomerge-nav">
+    <a href="/" class="geomerge-brand">geomerge</a>
+    <div class="geomerge-tabs">
+      <a href="/" class="geomerge-tab tab-blue">Home</a>
+      <a href="/setup/" class="geomerge-tab active tab-cyan">Setup</a>
+      <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
+      <a href="/prep/" class="geomerge-tab tab-purple">Prepare</a>
+      <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
+      <a href="/validate/" class="geomerge-tab tab-pink">Validate</a>
+    </div>
+      <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-knob">
+            <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
+            <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
+          </span>
+        </span>
+      </button>
+  </nav>
+  <header>
+    <div class="title-block">
+      <h1>Column matching rules</h1>
+    </div>
+    <a href="/setup/" class="back-link">&larr; Setup</a>
+  </header>
+
+  <div class="meta rules-intro">
+    First-pass suggestions when mapping a raw column to a target field — an <strong>exact</strong> term
+    only matches a raw column name equal to it; a <strong>contains</strong> term matches equal or
+    substring, either direction. Column mapping stays fully manual for anything these don't catch.
+  </div>
+
+  <div id="targets-body"></div>
+
+  <div id="rule-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="rule-modal-title"></h2>
+        <button id="rule-modal-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="rule-terms-body"></div>
+      <div class="rule-add-row">
+        <input type="text" id="rule-new-term" placeholder="raw column name or term" />
+        <select id="rule-new-type">
+          <option value="exact">Exact</option>
+          <option value="contains" selected>Contains</option>
+          <option value="excludes">Excludes</option>
+        </select>
+        <button type="button" id="rule-add-btn">+ Add</button>
+      </div>
+      <div class="modal-actions">
+        <button id="rule-save-btn">Save</button>
+        <span id="rule-save-status" class="meta"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="geomerge-footer">
+    <button type="button" id="footer-file-link" class="footer-file-link meta">editing: schema/column_matching_rules.yaml</button>
+    <span class="meta">&middot;</span>
+    <span id="rules-summary" class="meta"></span>
+  </footer>
+
+  <div id="file-preview-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2 id="file-preview-title"></h2>
+          <div id="file-preview-path" class="meta"></div>
+        </div>
+        <button id="file-preview-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <pre id="file-preview-content" class="code-block hljs"></pre>
+    </div>
+  </div>
+
+  <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+  <script src="/file-preview.js"></script>
+  <script src="/rule-editor.js"></script>
+  <script src="column_matching_rules.js"></script>
+  <script>
+    document.getElementById("footer-file-link").addEventListener("click", () => {
+      openFilePreview("schema/column_matching_rules.yaml", "api/column-matching-rules/raw");
+    });
+    document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
+    document.getElementById("file-preview-modal").addEventListener("click", (e) => {
+      if (e.target.id === "file-preview-modal") closeFilePreview();
+    });
+  </script>
+</body>
+</html>

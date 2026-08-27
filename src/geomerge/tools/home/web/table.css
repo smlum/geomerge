@@ -4,7 +4,8 @@
    overflow/max-height/scroll behavior, which differs per table (some are
    capped to an internally-scrolling region, some aren't); this file only
    owns the shared "closed card" look: rounded corners, shadow, and a plain
-   gray footer cap matching the header. */
+   gray footer cap matching the header — plus the header's own Filter
+   dropdown below, since every page with a .toggle also loads this file. */
 
 .table-scroll {
   border-radius: 10px;
@@ -14,6 +15,20 @@
 tfoot td {
   height: 0.75rem;
   padding: 0;
-  background: #f0f0f0;
+  background: var(--ctp-surface0);
   border-bottom: none;
+}
+
+/* Otherwise a bare <select> renders with the browser's native white fill,
+   which stood out sharply once the page background stopped being plain
+   white (see colors.css) — matches the border/radius/background language
+   every text input in the app already uses. */
+.toggle select {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font-family: inherit;
 }

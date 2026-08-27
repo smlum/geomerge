@@ -5,29 +5,43 @@ function statusBadge(status) {
   return span;
 }
 
-function linkedCell(status, href, boundary) {
-  const td = document.createElement("td");
-  if (boundary) td.classList.add("group-boundary");
-  const link = document.createElement("a");
-  link.href = href;
-  link.target = "_blank";
-  link.rel = "noopener";
-  link.appendChild(statusBadge(status));
-  td.appendChild(link);
-  return td;
-}
+// Every source-owned YAML file (metadata.yaml, column_map.yaml,
+// classification_map.yaml) gets the same treatment: clicking the status pill
+// opens a read-only preview in a modal (see openYamlModal) instead of
+// jumping straight into that tool's own edit UI in a new tab — a quick look
+// shouldn't cost a tab, and the modal's own "Edit" button is right there if
+// a look turns into an edit.
+// accent matches the nav tab that owns each file (see nav.css's .tab-*):
+// metadata -> Collect, column_map/classification_map -> Prepare (the
+// dedicated tab for both stages — see prep/'s server.py docstring).
+const YAML_PREVIEWS = {
+  metadata: {
+    filename: "metadata.yaml",
+    fetchUrl: (id) => `/collection/api/source/${encodeURIComponent(id)}/raw`,
+    editHref: (id) => `collection/?id=${encodeURIComponent(id)}`,
+    accent: "peach",
+  },
+  column_map: {
+    filename: "column_map.yaml",
+    fetchUrl: (id) => `/column-mapping/api/column_map/${encodeURIComponent(id)}/raw`,
+    editHref: (id) => `column-mapping/map.html?id=${encodeURIComponent(id)}`,
+    accent: "purple",
+  },
+  classification_map: {
+    filename: "classification_map.yaml",
+    fetchUrl: (id) => `/classification/api/classification/${encodeURIComponent(id)}/raw`,
+    editHref: (id) => `classification/review.html?id=${encodeURIComponent(id)}`,
+    accent: "purple",
+  },
+};
 
-// Opens a read-only preview of metadata.yaml in a modal (see
-// openMetadataModal) instead of jumping straight into collection/'s own
-// edit modal in a new tab — a quick look shouldn't cost a tab, and the
-// modal's own "Edit" button is right there if a look turns into an edit.
-function metadataCell(status, sourceId, boundary) {
+function yamlPreviewCell(status, sourceId, kind, boundary) {
   const td = document.createElement("td");
   if (boundary) td.classList.add("group-boundary");
   const badge = statusBadge(status);
   badge.classList.add("copyable");
-  badge.title = "Click to view metadata.yaml";
-  badge.addEventListener("click", () => openMetadataModal(sourceId));
+  badge.title = `Click to view ${YAML_PREVIEWS[kind].filename}`;
+  badge.addEventListener("click", () => openYamlModal(kind, sourceId));
   td.appendChild(badge);
   return td;
 }
@@ -40,6 +54,38 @@ function plainCell(status, boundary) {
   td.appendChild(statusBadge(status));
   return td;
 }
+
+// Raw has no editor of its own, but "complete" means a file's actually sat
+// down on disk somewhere — worth a click to confirm exactly where without
+// digging through data/raw/ by hand. "missing" stays a plain, inert badge
+// (see plainCell) since there's nothing to show.
+function rawInfoCell(status, sourceId, rawFilename, boundary) {
+  const td = document.createElement("td");
+  if (boundary) td.classList.add("group-boundary");
+  const badge = statusBadge(status);
+  if (status === "complete") {
+    badge.classList.add("copyable");
+    badge.title = "Click to view raw file location";
+    badge.addEventListener("click", () => openRawInfoModal(sourceId, rawFilename));
+  }
+  td.appendChild(badge);
+  return td;
+}
+
+function openRawInfoModal(sourceId, rawFilename) {
+  document.getElementById("raw-modal-title").textContent = sourceId;
+  document.getElementById("raw-modal-path").textContent = `data/raw/${sourceId}/${rawFilename}`;
+  document.getElementById("raw-modal").classList.remove("hidden");
+}
+
+function closeRawInfoModal() {
+  document.getElementById("raw-modal").classList.add("hidden");
+}
+
+document.getElementById("raw-modal-close").addEventListener("click", closeRawInfoModal);
+document.getElementById("raw-modal").addEventListener("click", (e) => {
+  if (e.target.id === "raw-modal") closeRawInfoModal();
+});
 
 // Pipeline stages (preprocessing/processing) have no review UI, but unlike
 // raw/validation they do have a real CLI command that fixes them — so when
@@ -72,31 +118,36 @@ async function copyCommand(badge, command) {
   }, 1000);
 }
 
-// Cross-blueprint fetch (collection/ owns metadata.yaml) — absolute path,
-// since this page is served from "/", not "/collection/".
-async function openMetadataModal(sourceId) {
-  document.getElementById("metadata-modal-title").textContent = sourceId;
-  document.getElementById("metadata-modal-edit").href = `collection/?id=${encodeURIComponent(sourceId)}`;
-  const content = document.getElementById("metadata-modal-content");
+// Cross-blueprint fetch (each tool owns its own YAML file) — absolute path,
+// since this page is served from "/", not from that tool's own prefix.
+async function openYamlModal(kind, sourceId) {
+  const preview = YAML_PREVIEWS[kind];
+  document.getElementById("yaml-modal-title").textContent = sourceId;
+  document.getElementById("yaml-modal-path").textContent = "";
+  const editBtn = document.getElementById("yaml-modal-edit");
+  editBtn.href = preview.editHref(sourceId);
+  editBtn.className = `edit-btn edit-btn-${preview.accent}`;
+  const content = document.getElementById("yaml-modal-content");
   content.textContent = "Loading…";
-  document.getElementById("metadata-modal").classList.remove("hidden");
+  document.getElementById("yaml-modal").classList.remove("hidden");
 
-  const res = await fetch(`/collection/api/source/${encodeURIComponent(sourceId)}/raw`);
+  const res = await fetch(preview.fetchUrl(sourceId));
   if (res.status === 404) {
-    content.textContent = "No metadata.yaml yet for this source.";
+    content.textContent = `No ${preview.filename} yet for this source.`;
     return;
   }
   const data = await res.json();
-  content.textContent = data.content;
+  document.getElementById("yaml-modal-path").textContent = data.path;
+  content.innerHTML = hljs.highlight(data.content, { language: "yaml" }).value;
 }
 
-function closeMetadataModal() {
-  document.getElementById("metadata-modal").classList.add("hidden");
+function closeYamlModal() {
+  document.getElementById("yaml-modal").classList.add("hidden");
 }
 
-document.getElementById("metadata-modal-close").addEventListener("click", closeMetadataModal);
-document.getElementById("metadata-modal").addEventListener("click", (e) => {
-  if (e.target.id === "metadata-modal") closeMetadataModal();
+document.getElementById("yaml-modal-close").addEventListener("click", closeYamlModal);
+document.getElementById("yaml-modal").addEventListener("click", (e) => {
+  if (e.target.id === "yaml-modal") closeYamlModal();
 });
 
 // "Complete" means nothing left to do anywhere in the row — every stage
@@ -125,17 +176,18 @@ function renderRow(s) {
   tr.appendChild(nameTd);
 
   // collection/ — metadata opens a read-only preview modal (see
-  // metadataCell); raw is just a badge for whether the file showed up on
+  // yamlPreviewCell); raw is just a badge for whether the file showed up on
   // disk, no tool to click into.
-  tr.appendChild(metadataCell(s.collection.metadata, s.source_id, true));
-  tr.appendChild(plainCell(s.collection.raw));
+  tr.appendChild(yamlPreviewCell(s.collection.metadata, s.source_id, "metadata", true));
+  tr.appendChild(rawInfoCell(s.collection.raw, s.source_id, s.collection.raw_filename));
 
-  // tools/ — human-reviewed cells link into their own web UI; preprocessing
-  // sits between them (mechanical, no review UI, but classification can't
-  // run without it — see server.py).
-  tr.appendChild(linkedCell(s.tools.column_mapping, `column-mapping/map.html?id=${encodeURIComponent(s.source_id)}`, true));
+  // tools/ — column_map.yaml and classification_map.yaml get the same
+  // read-only preview treatment as metadata.yaml (see yamlPreviewCell);
+  // preprocessing sits between them (mechanical, no review UI, but
+  // classification can't run without it — see server.py).
+  tr.appendChild(yamlPreviewCell(s.tools.column_mapping, s.source_id, "column_map", true));
   tr.appendChild(pipelineCell(s.tools.preprocessing, s.source_id, "preprocessing"));
-  tr.appendChild(linkedCell(s.tools.classification, `classification/review.html?id=${encodeURIComponent(s.source_id)}`));
+  tr.appendChild(yamlPreviewCell(s.tools.classification, s.source_id, "classification_map"));
 
   // pipeline/ — mechanical, no review UI to link into yet.
   tr.appendChild(pipelineCell(s.pipeline.processing, s.source_id, "processing", true));
@@ -190,7 +242,15 @@ function render() {
   document.getElementById("summary").textContent = `${completeCount} / ${sources.length} sources complete`;
 }
 
+// /api/sources recomputes every source's status from scratch on every call
+// (no caching yet) — with real source counts that's several seconds, and an
+// empty table body during that wait looks identical to "there's just
+// nothing here" or a frozen page, not "still loading". This is the whole
+// fix for that: an explicit row + footer text the instant load() starts,
+// not just once data arrives.
 async function load() {
+  document.getElementById("rows-body").innerHTML = '<tr><td colspan="8" class="meta">Loading…</td></tr>';
+  document.getElementById("summary").textContent = "Loading…";
   const res = await fetch("api/sources");
   sources = await res.json();
   render();
