@@ -197,6 +197,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 "exact": target_rules.get("exact") or [],
                 "contains": target_rules.get("contains") or [],
                 "excludes": target_rules.get("excludes") or [],
+                "excludes_contains": target_rules.get("excludes_contains") or [],
             })
         return jsonify(targets)
 
@@ -211,9 +212,15 @@ def create_blueprint(config: dict = None) -> Blueprint:
         exact = [t.strip() for t in (body.get("exact") or []) if t.strip()]
         contains = [t.strip() for t in (body.get("contains") or []) if t.strip()]
         excludes = [t.strip() for t in (body.get("excludes") or []) if t.strip()]
+        excludes_contains = [t.strip() for t in (body.get("excludes_contains") or []) if t.strip()]
 
         rules = load_column_matching_rules()
-        rules[target] = {"exact": exact, "contains": contains, "excludes": excludes}
+        rules[target] = {
+            "exact": exact,
+            "contains": contains,
+            "excludes": excludes,
+            "excludes_contains": excludes_contains,
+        }
 
         column_matching_rules_path.parent.mkdir(parents=True, exist_ok=True)
         with open(column_matching_rules_path, "w") as f:

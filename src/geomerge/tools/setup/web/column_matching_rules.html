@@ -17,7 +17,7 @@
     <a href="/" class="geomerge-brand">geomerge</a>
     <div class="geomerge-tabs">
       <a href="/" class="geomerge-tab tab-blue">Home</a>
-      <a href="/setup/" class="geomerge-tab active tab-cyan">Setup</a>
+      <a href="/setup/" class="geomerge-tab active tab-lavender">Setup</a>
       <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
       <a href="/prep/" class="geomerge-tab tab-purple">Prepare</a>
       <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
@@ -36,13 +36,16 @@
     <div class="title-block">
       <h1>Column matching rules</h1>
     </div>
-    <a href="/setup/" class="back-link">&larr; Setup</a>
+    <a href="/setup/" class="back-link">&larr; Back</a>
   </header>
 
   <div class="meta rules-intro">
-    First-pass suggestions when mapping a raw column to a target field — an <strong>exact</strong> term
-    only matches a raw column name equal to it; a <strong>contains</strong> term matches equal or
-    substring, either direction. Column mapping stays fully manual for anything these don't catch.
+    First-pass suggestions when mapping a raw column to a target field. An <strong>exact</strong> term
+    only matches a raw column name equal to it; a <strong>contains</strong> term matches when found
+    anywhere inside the raw name — if more than one target's contains term matches, the longest (most
+    specific) one wins. An <strong>exclude</strong> term (exact or contains, same two modes) blocks a raw
+    name from ever matching this target, regardless of any other rule. Column mapping stays fully manual
+    for anything these don't catch.
   </div>
 
   <div id="targets-body"></div>
@@ -56,10 +59,13 @@
       <div id="rule-terms-body"></div>
       <div class="rule-add-row">
         <input type="text" id="rule-new-term" placeholder="raw column name or term" />
-        <select id="rule-new-type">
+        <select id="rule-new-behavior">
+          <option value="match" selected>Match</option>
+          <option value="exclude">Exclude</option>
+        </select>
+        <select id="rule-new-mode">
           <option value="exact">Exact</option>
           <option value="contains" selected>Contains</option>
-          <option value="excludes">Excludes</option>
         </select>
         <button type="button" id="rule-add-btn">+ Add</button>
       </div>

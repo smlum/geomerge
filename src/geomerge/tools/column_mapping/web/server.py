@@ -22,7 +22,7 @@ from flask import Blueprint, jsonify, redirect, request, send_from_directory
 from geomerge.helpers.config import load_config
 from geomerge.helpers.matching import match_name
 from geomerge.tools.column_mapping.inspect_raw import GEO_FORMATS, inspect_columns
-from geomerge.tools.column_mapping.status import load_yaml, source_status
+from geomerge.tools.column_mapping.status import cached_raw_column_names, load_yaml, source_status
 
 
 def create_blueprint(config: dict = None) -> Blueprint:
@@ -85,8 +85,17 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
         try:
             columns = inspect_columns(raw_path, fmt, sample_count=sample_count, sample_max_len=sample_max_len)
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            # Broad on purpose: raw files are external, arbitrary-shaped data
+            # (a mislabeled format, a BOM, a nested structure a format-specific
+            # reader doesn't expect) — any of those can throw something other
+            # than ValueError (a real prior bug: a GeoJSON file mislabeled as
+            # "json" hit a bare TypeError here, which — uncaught — became an
+            # HTML 500 page. The frontend's res.json() then threw on that HTML,
+            # silently, leaving the page looking like it just never loaded).
+            # Catching everything here keeps that failure mode to "a real,
+            # visible error message" instead of a silent hang.
+            return jsonify({"error": f"failed to read raw file: {e}"}), 400
 
         matching_rules = load_matching_rules()
         saved = load_yaml(source_dir / "column_map.yaml")
@@ -141,7 +150,16 @@ def create_blueprint(config: dict = None) -> Blueprint:
         # Guard against a partial/stale submission silently clobbering a good
         # mapping (e.g. a direct API call, or two tabs open on the same source) —
         # the payload must cover every column currently in the raw file, not just
-        # some of them.
+        # some of them. Only the column *names* matter for this check, so this
+        # uses the same cheap, cached read status.py's dashboard scan does —
+        # not inspect_columns()'s full per-column dtype/null/unique/sample pass,
+        # which a save/flag click has no use for. Re-parsing a whole raw file
+        # (sometimes hundreds of MB) just to write a small YAML was itself the
+        # bug: it made a save no safer (a mismatched column list is exactly as
+        # detectable from names alone) while dragging in every failure mode a
+        # full data read can hit that a schema-only read doesn't (e.g. a value
+        # that can't be hashed for .unique() — a real prior bug that turned
+        # Flag & next into an indefinite hang on one particular file).
         source_dir = sources_dir / source_id
         metadata = load_yaml(source_dir / "metadata.yaml")
         raw_filename = metadata.get("raw_filename")
@@ -150,8 +168,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
             raw_path = raw_dir / source_id / raw_filename
             if raw_path.exists():
                 try:
-                    raw_columns = {c["name"] for c in inspect_columns(raw_path, fmt)}
-                except ValueError:
+                    raw_columns = cached_raw_column_names(raw_path, fmt)
+                except Exception:
                     raw_columns = None
                 if raw_columns is not None:
                     submitted = set(assignments)

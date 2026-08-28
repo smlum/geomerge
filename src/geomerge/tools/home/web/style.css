@@ -148,6 +148,25 @@ th {
   font-weight: 600;
 }
 
+/* Opens the cross-page source-info card (see /source-card.js) — plain text
+   otherwise (same weight/color as before this existed), cursor + hover
+   underline are the only tell that it's clickable, since it isn't a
+   navigational link like the mauve ones elsewhere. */
+.source-card-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+
+.source-card-trigger:hover {
+  text-decoration: underline;
+}
+
 td a {
   text-decoration: none;
 }

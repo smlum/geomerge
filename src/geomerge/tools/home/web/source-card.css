@@ -1,0 +1,102 @@
+/* Backs /source-card.js's cross-page source-info modal — loaded via an
+   absolute <link href="/source-card.css">, same reasoning as modal.css/
+   table.css: one copy instead of one per tool. modal.css owns the overlay/
+   panel/header chrome; this file owns just the metadata rows and status
+   pills inside it. */
+
+.source-card-section {
+  margin-bottom: 1.25rem;
+}
+
+.source-card-section:last-child {
+  margin-bottom: 0;
+}
+
+.source-card-section-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.source-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.source-card-row:last-child {
+  border-bottom: none;
+}
+
+.source-card-row-label {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.source-card-row-value {
+  color: var(--color-text);
+  text-align: right;
+  word-break: break-word;
+}
+
+.source-card-row-value a {
+  color: var(--ctp-mauve);
+  text-decoration: none;
+}
+
+.source-card-row-value a:hover {
+  text-decoration: underline;
+}
+
+.source-card-empty {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* Namespaced separately from any one tool's own .status classes (home/prep/
+   column_mapping each keep their own for their own tables) — see this
+   file's header comment for why. Same palette/shape as those, just its own
+   copy so the card never depends on whichever page happened to open it. */
+.source-card-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.source-card-status-not_started,
+.source-card-status-not_applicable,
+.source-card-status-not_built {
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
+}
+
+.source-card-status-not_built {
+  font-style: italic;
+}
+
+.source-card-status-missing,
+.source-card-status-stale {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+}
+
+.source-card-status-partial,
+.source-card-status-needs_review,
+.source-card-status-not_complete {
+  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
+}
+
+.source-card-status-complete {
+  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
+  color: var(--ctp-green);
+}

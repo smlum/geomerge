@@ -66,9 +66,8 @@
 
 /* A small accent palette for tab identity, kept deliberately distinct from
    the status-badge palette (green/yellow/red — those mean complete/warning/
-   missing) so a colored tab never reads as a status. Six here, two in use
-   (Home, Collection) — the rest are ready for Tools/Pipeline/etc. as they
-   become tabs. Each color shows on hover too (a preview of that tab's
+   missing) so a colored tab never reads as a status. All seven now in use,
+   one per tab. Each color shows on hover too (a preview of that tab's
    identity) as well as when active — hover doesn't get the bold weight,
    so it still reads as "not the current page".
 
@@ -114,6 +113,17 @@
   color: var(--ctp-sapphire);
 }
 
+/* Setup used to share tab-cyan's sapphire with Process's teal — close enough
+   in both Latte and Frappé to read as the same color at a glance. Lavender
+   is the most distinct hue left unused (rosewater/flamingo/maroon sit too
+   close to peach/pink already in use; green/yellow/red are reserved for
+   status, per this block's own comment above). */
+.geomerge-tab.active.tab-lavender,
+.geomerge-tab.tab-lavender:hover {
+  background: color-mix(in srgb, var(--ctp-lavender) 18%, var(--color-panel-bg));
+  color: var(--ctp-lavender);
+}
+
 /* Sliding pill switch, pushed to the far right of the nav — click calls
    toggleTheme() (see theme.js). The icon rides inside the knob (swapped by
    [data-theme], same as every color in the app) rather than sitting fixed
@@ -126,6 +136,11 @@
   padding: 0;
   cursor: pointer;
   flex-shrink: 0;
+  /* Without this, Safari draws its own native rounded-rect hover highlight
+     on top of a plain <button> regardless of custom content — a small-
+     corner-radius rectangle that clashes with the oval track drawn below. */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .theme-toggle-track {

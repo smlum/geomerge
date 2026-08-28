@@ -172,7 +172,12 @@ function renderRow(s) {
 
   const nameTd = document.createElement("td");
   nameTd.className = "name";
-  nameTd.textContent = s.source_id;
+  const nameBtn = document.createElement("button");
+  nameBtn.type = "button";
+  nameBtn.className = "source-card-trigger";
+  nameBtn.textContent = s.source_id;
+  nameBtn.addEventListener("click", () => openSourceCard(s.source_id));
+  nameTd.appendChild(nameBtn);
   tr.appendChild(nameTd);
 
   // collection/ — metadata opens a read-only preview modal (see

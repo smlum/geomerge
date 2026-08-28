@@ -59,6 +59,12 @@ def create_blueprint(config: dict = None) -> Blueprint:
             result.append({
                 "source_id": source_id,
                 "column_mapping": cm["column_map_status"],
+                # For the footer's "N flagged" stat (app.js) — column mapping's
+                # own "revisit later" flag (see column_mapping/status.py).
+                # Classification has no equivalent flag feature yet; app.js
+                # ORs this against a classification_flagged field that simply
+                # doesn't exist yet, so adding one later needs no rework here.
+                "column_mapping_flagged": cm["flagged"],
                 # Mechanical, no review UI of its own — but classification
                 # can't run without it (it reads the standardized columns
                 # preprocessing produces, not raw ones), so it sits between

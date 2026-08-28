@@ -65,7 +65,12 @@ function renderRow(s) {
 
   const nameTd = document.createElement("td");
   nameTd.className = "name";
-  nameTd.textContent = s.source_id;
+  const nameBtn = document.createElement("button");
+  nameBtn.type = "button";
+  nameBtn.className = "source-card-trigger";
+  nameBtn.textContent = s.source_id;
+  nameBtn.addEventListener("click", () => openSourceCard(s.source_id));
+  nameTd.appendChild(nameBtn);
   tr.appendChild(nameTd);
 
   tr.appendChild(linkedCell(s.column_mapping, `/column-mapping/map.html?id=${encodeURIComponent(s.source_id)}`));
@@ -109,8 +114,23 @@ function render() {
     body.appendChild(renderRow(s));
   }
 
-  const completeCount = sources.filter(isRowComplete).length;
-  document.getElementById("progress").textContent = `${completeCount} / ${sources.length} complete`;
+  // Two aspects, not the blended all-three-stages complete count — that's
+  // enough on its own to read as "how's review going" without also needing
+  // a third combined number. Preprocessing is left out on purpose: it's
+  // mechanical (no review UI, no judgment calls), unlike these two.
+  // not_applicable counts as done for classification, same as isRowComplete
+  // above — a source with nothing to classify isn't "still to do".
+  const mappedCount = sources.filter((s) => s.column_mapping === "complete").length;
+  const classifiedCount = sources.filter(
+    (s) => s.classification === "complete" || s.classification === "not_applicable"
+  ).length;
+  // "flagged on either map or classify" — classification has no flag
+  // feature yet (column_mapping_flagged is the only real signal today), but
+  // OR-ing against classification_flagged now means adding one later just
+  // works, no rework needed here.
+  const flaggedCount = sources.filter((s) => s.column_mapping_flagged || s.classification_flagged).length;
+  document.getElementById("progress").textContent =
+    `${mappedCount} / ${sources.length} mapped · ${classifiedCount} / ${sources.length} classified · ${flaggedCount} flagged`;
 }
 
 // /api/sources recomputes every source's status from scratch on every call

@@ -55,7 +55,8 @@ function progressText(filterMode) {
   }
   const doneCount = rows.filter(isDone).length;
   const foundCount = rows.filter((r) => r.source_url).length;
-  return `${doneCount} / ${rows.length} checked  ·  <span class="found-count">${foundCount} found</span>`;
+  const flaggedCount = rows.filter((r) => r.flagged).length;
+  return `${doneCount} / ${rows.length} checked  ·  <span class="found-count">${foundCount} found</span>  ·  ${flaggedCount} flagged`;
 }
 
 function render() {

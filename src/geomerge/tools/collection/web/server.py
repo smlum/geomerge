@@ -281,6 +281,45 @@ def create_blueprint(config: dict = None) -> Blueprint:
         df = load_checklist()
         if row_index not in df.index:
             return jsonify({"error": "row not found"}), 404
+        row = df.loc[row_index]
+
+        # Undo whatever Found/Generate already created for this row on disk —
+        # the same folders /api/remove_source knows how to delete — instead
+        # of silently leaving them behind. Every other tool discovers sources
+        # purely by scanning sources/*, with no idea this checklist row ever
+        # retracted them, so an un-deleted folder from a prior Found/Generate
+        # keeps looking like a real, in-progress source everywhere else (a
+        # real incident: bc_thompson_nicola_regional_district_cycling stayed
+        # in Prepare's list long after this row was marked not found here).
+        # Blocked — not deleted, not left as a silent orphan either — if real
+        # downstream work already exists, same guard /api/rename_source uses,
+        # since silently destroying real review work would be worse than
+        # either alternative.
+        generated_ids = source_ids_for(row)
+        blocked = [sid for sid in generated_ids if downstream_work_exists(sid)]
+        if blocked:
+            return jsonify({
+                "error": f"can't mark not found — already has real work done: {', '.join(blocked)}. Remove the source first if you're sure.",
+            }), 400
+
+        # /api/found creates this row's raw-dir stub immediately, before
+        # Generate necessarily ever runs — covers Found -> (never Generate)
+        # -> Not Found, which generated_ids above wouldn't catch on its own.
+        # Only cleaned up if it's still genuinely empty (nobody downloaded
+        # anything into it yet) and Generate never created a metadata.yaml
+        # there — otherwise it might be a real, if not-yet-catalogued,
+        # download, so it's left alone rather than guessed away.
+        cleanup_ids = list(generated_ids)
+        if row["provider_id"]:
+            guessed_id = next_source_id(row["provider_id"])
+            guessed_raw_dir = raw_dir / guessed_id
+            if (
+                guessed_id not in cleanup_ids
+                and not yaml_path_for(guessed_id).exists()
+                and guessed_raw_dir.is_dir()
+                and not any(guessed_raw_dir.iterdir())
+            ):
+                cleanup_ids.append(guessed_id)
 
         today = str(date.today())
         df.at[row_index, "checked"] = "x"
@@ -294,6 +333,13 @@ def create_blueprint(config: dict = None) -> Blueprint:
             existing = df.at[row_index, "notes"]
             df.at[row_index, "notes"] = f"{existing}; {notes}" if existing else notes
         save_checklist(df)
+
+        for source_id in cleanup_ids:
+            for base_dir in (sources_dir, raw_dir):
+                target = base_dir / source_id
+                if target.exists():
+                    shutil.rmtree(target)
+
         return jsonify({"checked_date": today})
 
     @bp.route("/api/note", methods=["POST"])

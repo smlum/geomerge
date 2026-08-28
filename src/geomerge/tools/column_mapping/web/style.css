@@ -1,9 +1,35 @@
+/* display: flex + min-height: 100vh here, plus .content-area's flex: 1
+   below, is what keeps the footer pinned to the true bottom of the viewport
+   regardless of row count — a short raw file's table (see .table-scroll's
+   own comment) no longer stretches to fill the page, but without this the
+   leftover space it used to fill would just be unclaimed, leaving the
+   footer floating above the real bottom instead of sitting at it. The
+   min-height floor is what lets a short page still measure a full viewport
+   for this to distribute; a tall page (table-scroll capped at its own
+   max-height and scrolling internally) still naturally totals to ~100vh, so
+   this doesn't change that case. */
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
   padding: 1.5rem 2rem 4rem;
   color: var(--color-text);
   background: var(--color-page-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Wraps everything between the sticky header and the footer. flex: 1 lets it
+   absorb whatever vertical space the (now shrink-to-fit) table-scroll below
+   doesn't use, so the footer still lands at the true bottom of a short page.
+   min-height: 0 overrides flexbox's default min-height: auto on this axis —
+   without it, a nested flex child refuses to shrink below its content size,
+   which would silently defeat table-scroll's own max-height/overflow. */
+.content-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 *, *::before, *::after {
@@ -45,22 +71,19 @@ h1 {
   min-width: 0;
 }
 
-/* Opens the dataset's portal page (metadata.yaml's dataset_page_url) in a
-   new tab — useful for checking an unexpected raw column or value against
-   the original listing. Hidden (see map.js) when a source has none. */
-.source-link {
+/* Same Prepare-purple accent as source-label — matches setup/style.css's own
+   .back-link (there, sapphire, for its own tab's identity). Plain navigation
+   back to home, not a save action: Save & next/Flag & next are the only
+   ways to persist a change, same as before. */
+.back-link {
   font-size: 0.85rem;
   color: var(--ctp-mauve);
   text-decoration: none;
   white-space: nowrap;
 }
 
-.source-link:hover {
+.back-link:hover {
   text-decoration: underline;
-}
-
-.source-link.hidden {
-  display: none;
 }
 
 .meta {
@@ -88,6 +111,25 @@ h1 {
   color: var(--ctp-mauve);
 }
 
+/* Opens the cross-page source-info card (see /source-card.js) — a real
+   <button> now, not a <span>, so it needs its own reset (buttons don't
+   inherit ambient font/border/background the way inline elements do); font:
+   inherit is safe here since #source-label really is this button's DOM
+   parent (not just a co-applied sibling class the way footer-file-link's
+   comment above warns about). */
+.source-label .source-card-trigger {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.source-label .source-card-trigger:hover {
+  text-decoration: underline;
+}
+
 /* Shown when the currently open source was saved via "Flag & next" (see
    map.js) instead of a real completing save — a visual reminder that this
    one was deliberately left unfinished, not accidentally skipped. */
@@ -105,9 +147,16 @@ h1 {
   display: none;
 }
 
-/* The footer's "editing: <path>" link — same role as collection's own
-   footer path text, but clickable here: opens a read-only raw-file preview
-   (see file-preview.js) instead of just stating the path. */
+/* "editing:" is plain, non-clickable .meta text; only the path itself
+   (#footer-file-link) opens the read-only raw-file preview (see
+   file-preview.js) — a tighter gap than the footer's own 1.5rem between
+   stats, since these two read as one phrase, not two separate items. */
+.footer-file-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 /* Deliberately doesn't touch font-family/font-size/color — this is always
    paired with class="meta" on the same element (see map.html), and
    "inherit" would pull from the parent footer instead of picking up that
@@ -298,9 +347,8 @@ button {
 
 /* Same pill language + Prepare-tab purple accent as the Edit button on
    home's YAML preview modal (see home/web/style.css's .edit-btn-purple) —
-   Save & next is the primary action (solid purple); Save & back to home is
-   secondary (purple outline), the less common way out of a row of sources
-   still needing work. */
+   Save & next is the primary (and, since Save & back to home was removed,
+   only) way to persist a change. */
 #save-next-btn {
   padding: 0.45rem 1.1rem;
   font-size: 0.9rem;
@@ -315,36 +363,20 @@ button {
   filter: brightness(0.92);
 }
 
-#save-back-btn {
-  padding: 0.45rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border-radius: 6px;
-  border: 1px solid var(--ctp-mauve);
-  background: var(--color-panel-bg);
-  color: var(--ctp-mauve);
-}
-
-#save-back-btn:hover {
-  background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
-}
-
-#save-next-btn:disabled,
-#save-back-btn:disabled {
+#save-next-btn:disabled {
   background: var(--ctp-surface1);
   border-color: var(--ctp-surface1);
   color: var(--color-text-secondary);
   cursor: not-allowed;
 }
 
-#save-next-btn:disabled:hover,
-#save-back-btn:disabled:hover {
+#save-next-btn:disabled:hover {
   background: var(--ctp-surface1);
 }
 
 /* Amber, not purple — a deliberate "set this aside" action, distinct from
-   the two real completing saves. Never disabled by recomputeCollisions()
-   the way save-next/save-back are, since flagging is exactly how you get
+   Save & next. Never disabled by recomputeCollisions() the way save-next is,
+   since flagging is exactly how you get
    past a source you don't want to resolve collisions on right now. */
 #flag-next-btn {
   padding: 0.45rem 1.1rem;
@@ -486,7 +518,8 @@ button:hover {
   white-space: nowrap;
 }
 
-.rule-term-type {
+.rule-term-behavior,
+.rule-term-mode {
   flex-shrink: 0;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
@@ -494,22 +527,30 @@ button:hover {
   font-weight: 600;
 }
 
-/* Blue/green/red — a distinct accent per type, not the panel-generic gray
-   the usage-badge/summary text elsewhere uses, since telling exact from
-   contains from excludes at a glance is the whole point of the badge. */
-.rule-term-type-exact {
-  background: color-mix(in srgb, var(--ctp-blue) 20%, var(--color-panel-bg));
-  color: var(--ctp-blue);
-}
-
-.rule-term-type-contains {
+/* Two independent badges, not one compound label — behavior (match/exclude,
+   green/red, reusing the same allow/block semantic as flag-yes/flag-no
+   elsewhere) and mode (exact/contains, blue/mauve, a neutral pair not
+   already meaningful as a status color) are two separate questions about a
+   term, so they get two separate at-a-glance colors instead of one 4-way
+   label you'd have to parse every time. */
+.rule-term-behavior-match {
   background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
   color: var(--ctp-green);
 }
 
-.rule-term-type-excludes {
+.rule-term-behavior-exclude {
   background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
   color: var(--ctp-red);
+}
+
+.rule-term-mode-exact {
+  background: color-mix(in srgb, var(--ctp-blue) 20%, var(--color-panel-bg));
+  color: var(--ctp-blue);
+}
+
+.rule-term-mode-contains {
+  background: color-mix(in srgb, var(--ctp-mauve) 20%, var(--color-panel-bg));
+  color: var(--ctp-mauve);
 }
 
 .rule-add-row {

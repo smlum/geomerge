@@ -27,10 +27,24 @@ updateStickyOffsets();
 
 async function load() {
   document.getElementById("source-label").innerHTML =
-    `<span class="field-label">Source ID:</span> <span class="field-value">${escapeHtml(sourceId)}</span>`;
+    `<span class="field-label">Source ID:</span> <button type="button" class="field-value source-card-trigger">${escapeHtml(sourceId)}</button>`;
+  document.querySelector("#source-label .source-card-trigger").addEventListener("click", () => openSourceCard(sourceId));
 
-  const res = await fetch(`api/column_map/${encodeURIComponent(sourceId)}`);
-  const data = await res.json();
+  // A failed response isn't always JSON (a server-side crash the backend
+  // itself didn't catch renders as an HTML error page, not {"error": ...}) —
+  // res.json() throwing on that is exactly what let a previous bug make this
+  // page look like it "just never loaded", with no visible error at all. Any
+  // failure here — network, non-JSON body, anything — now ends in a message
+  // in the table instead of silently doing nothing.
+  let res, data;
+  try {
+    res = await fetch(`api/column_map/${encodeURIComponent(sourceId)}`);
+    data = await res.json();
+  } catch (e) {
+    document.getElementById("rows-body").innerHTML =
+      `<tr><td colspan="6" class="error">Failed to load: ${escapeHtml(String(e))}</td></tr>`;
+    return;
+  }
   if (!res.ok) {
     document.getElementById("rows-body").innerHTML = `<tr><td colspan="6" class="error">${escapeHtml(data.error)}</td></tr>`;
     return;
@@ -44,12 +58,8 @@ async function load() {
 
   const columnMapPath = `sources/${sourceId}/column_map.yaml`;
   const fileLink = document.getElementById("footer-file-link");
-  fileLink.textContent = `editing: ${columnMapPath}`;
+  fileLink.textContent = columnMapPath;
   fileLink.onclick = () => openFilePreview(columnMapPath, `api/column_map/${encodeURIComponent(sourceId)}/raw`);
-
-  const sourceLink = document.getElementById("source-link");
-  sourceLink.classList.toggle("hidden", !data.dataset_page_url);
-  if (data.dataset_page_url) sourceLink.href = data.dataset_page_url;
 
   targets = data.targets;
   reminderTargets = data.reminder_targets;
@@ -189,11 +199,9 @@ function recomputeCollisions() {
     select.closest("tr").classList.toggle("collision", isCollision);
   }
 
-  const title = anyCollision ? "Resolve the highlighted collisions first" : "";
-  for (const btn of [document.getElementById("save-next-btn"), document.getElementById("save-back-btn")]) {
-    btn.disabled = anyCollision;
-    btn.title = title;
-  }
+  const btn = document.getElementById("save-next-btn");
+  btn.disabled = anyCollision;
+  btn.title = anyCollision ? "Resolve the highlighted collisions first" : "";
 }
 
 function recomputeMissingTargets() {
@@ -212,15 +220,13 @@ function recomputeMissingTargets() {
   container.innerHTML = `Not mapped: ${missing.join(", ")}`;
 }
 
-// All three buttons are disabled for the whole operation (not just their own
+// Both buttons are disabled for the whole operation (not just their own
 // click target) — Save & next's second phase (findNextSourcePreferUnflagged,
-// below) hits the same slow /api/sources scan as Save & back or Flag & next
-// would if clicked meanwhile, so leaving any of them live invites a
-// double-submit while the first request is still in flight, with no visual
-// sign anything is happening.
+// below) hits the same slow /api/sources scan Flag & next would if clicked
+// meanwhile, so leaving either live invites a double-submit while the first
+// request is still in flight, with no visual sign anything is happening.
 function setSaving(inProgress, message) {
   document.getElementById("save-next-btn").disabled = inProgress;
-  document.getElementById("save-back-btn").disabled = inProgress;
   document.getElementById("flag-next-btn").disabled = inProgress;
   document.getElementById("save-status").textContent = message || "";
 }
@@ -248,33 +254,40 @@ async function save(destination) {
     assignments[select.dataset.column] = select.value || null;
   }
 
-  const res = await fetch(`api/column_map/${encodeURIComponent(sourceId)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignments, flagged: flagging }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    setSaving(false, data.error || "Failed to save");
-    return;
-  }
+  // Every step below is wrapped, not just the save request itself — a bug
+  // that made a save crash also crashed silently (res.json() throwing on an
+  // HTML error page it wasn't expecting), which is exactly what turned Flag &
+  // next into a button stuck forever on "Flagging…" with no way to tell it
+  // had actually failed rather than still being in flight. Now any failure
+  // anywhere in this flow — the save itself, or the next-source lookup after
+  // it — ends in a visible message and buttons re-enabled, never a hang.
+  try {
+    const res = await fetch(`api/column_map/${encodeURIComponent(sourceId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignments, flagged: flagging }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setSaving(false, data.error || "Failed to save");
+      return;
+    }
 
-  if (destination === "back") {
-    goHome();
-    return;
-  }
-
-  // The slow step — findNextSourcePreferUnflagged scans every source's status
-  // (see /api/sources) to find the next one still needing work, which is the
-  // actual multi-second wait after clicking Save & next, not the save itself.
-  // Naming it explicitly here (rather than leaving "Saving…" up) is the whole
-  // fix for not knowing whether anything's happening.
-  setSaving(true, "Finding next source…");
-  const nextSourceId = await findNextSourcePreferUnflagged(sourceId);
-  if (nextSourceId) {
-    location.href = `map.html?id=${encodeURIComponent(nextSourceId)}`;
-  } else {
-    goHome();
+    // The slow step — findNextSourcePreferUnflagged scans every source's
+    // status (see /api/sources) to find the next one still needing work,
+    // which is the actual multi-second wait after clicking Save & next, not
+    // the save itself. Naming it explicitly here (rather than leaving
+    // "Saving…" up) is the whole fix for not knowing whether anything's
+    // happening.
+    setSaving(true, "Finding next source…");
+    const nextSourceId = await findNextSourcePreferUnflagged(sourceId);
+    if (nextSourceId) {
+      location.href = `map.html?id=${encodeURIComponent(nextSourceId)}`;
+    } else {
+      goHome();
+    }
+  } catch (e) {
+    setSaving(false, `Something went wrong: ${e}`);
   }
 }
 
@@ -289,6 +302,5 @@ function cssEscape(s) {
 }
 
 document.getElementById("save-next-btn").addEventListener("click", () => save("next"));
-document.getElementById("save-back-btn").addEventListener("click", () => save("back"));
 document.getElementById("flag-next-btn").addEventListener("click", () => save("flag"));
 load();

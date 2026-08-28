@@ -8,7 +8,7 @@ async function load() {
 }
 
 function hasRules(t) {
-  return t.exact.length || t.contains.length || t.excludes.length;
+  return t.exact.length || t.contains.length || t.excludes.length || t.excludes_contains.length;
 }
 
 function ruleSummary(t) {
@@ -16,6 +16,7 @@ function ruleSummary(t) {
   if (t.exact.length) parts.push(`${t.exact.length} exact`);
   if (t.contains.length) parts.push(`${t.contains.length} contains`);
   if (t.excludes.length) parts.push(`${t.excludes.length} excludes`);
+  if (t.excludes_contains.length) parts.push(`${t.excludes_contains.length} excludes (contains)`);
   return parts.length ? parts.join(", ") : "no rules yet";
 }
 
@@ -83,6 +84,7 @@ async function saveRule() {
   activeTarget.exact = saved.exact;
   activeTarget.contains = saved.contains;
   activeTarget.excludes = saved.excludes;
+  activeTarget.excludes_contains = saved.excludes_contains;
   render();
   closeRuleModal();
 }

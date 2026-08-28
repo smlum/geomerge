@@ -24,6 +24,7 @@ Then open http://localhost:8640
 
 from pathlib import Path
 
+import yaml
 from flask import Flask, jsonify, send_from_directory
 
 from geomerge.helpers.config import load_config
@@ -60,65 +61,96 @@ def create_app(config: dict = None) -> Flask:
             return []
         return sorted(p.name for p in sources_dir.iterdir() if p.is_dir())
 
+    # Shared by /api/sources (every source, for the dashboard table) and
+    # /api/source_info/<id> (one source, for the cross-page source-card
+    # modal — see /source-card.js) so the two never drift out of sync on
+    # what "status" means for a given stage.
+    def source_row(source_id: str) -> dict:
+        cm = column_mapping_status(source_id, config)
+        cls = classification_status(source_id, config)
+
+        # One column, not one per target attribute: complete only if
+        # every *applicable* target is complete. not_applicable targets
+        # (e.g. this source has no source_snow_removal column at all)
+        # don't count against it — a source with nothing to classify
+        # isn't "incomplete", it's not_applicable itself.
+        applicable = [s for s in cls["targets"].values() if s != "not_applicable"]
+        if not applicable:
+            classification_overall = "not_applicable"
+        elif all(s == "complete" for s in applicable):
+            classification_overall = "complete"
+        else:
+            classification_overall = "not_complete"
+
+        return {
+            "source_id": source_id,
+            # collection/ — what the collection checklist tool produces:
+            # metadata.yaml and the raw file landing on disk.
+            "collection": {
+                "metadata": source_metadata_status(source_id, config),
+                "raw": source_raw_data_status(source_id, config),
+                # For the raw pill's info modal (app.js) — reuses
+                # column_mapping_status's own read of metadata.yaml rather
+                # than a second one, since cm is already computed above.
+                "raw_filename": cm["raw_filename"],
+            },
+            # tools/ (displayed as "Prep") — human-reviewed decisions
+            # needed before the rest of the pipeline can run, plus
+            # preprocessing itself: mechanical (no review UI of its own),
+            # but it sits here rather than in pipeline/ below because
+            # classification can't run without it — it reads the
+            # standardized columns preprocessing produces, not raw ones.
+            "tools": {
+                "column_mapping": cm["column_map_status"],
+                "preprocessing": preprocessing_status(source_id, config),
+                "classification": classification_overall,
+            },
+            # pipeline/ — mechanical processing with no human decisions
+            # of its own. Validation is a placeholder — no automated-
+            # check step exists yet (geomerge.config.yaml's "validate" stage
+            # is still commented out) — "not_built" rather than
+            # "not_started" so it doesn't read as "you have work to do"
+            # when the real answer is "there's nothing here yet".
+            "pipeline": {
+                "processing": processing_status(source_id, config),
+                "validation": "not_built",
+            },
+        }
+
     @app.route("/")
     def index():
         return send_from_directory(app.static_folder, "index.html")
 
     @app.route("/api/sources")
     def api_sources():
-        result = []
-        for source_id in source_ids():
-            cm = column_mapping_status(source_id, config)
-            cls = classification_status(source_id, config)
+        return jsonify([source_row(source_id) for source_id in source_ids()])
 
-            # One column, not one per target attribute: complete only if
-            # every *applicable* target is complete. not_applicable targets
-            # (e.g. this source has no source_snow_removal column at all)
-            # don't count against it — a source with nothing to classify
-            # isn't "incomplete", it's not_applicable itself.
-            applicable = [s for s in cls["targets"].values() if s != "not_applicable"]
-            if not applicable:
-                classification_overall = "not_applicable"
-            elif all(s == "complete" for s in applicable):
-                classification_overall = "complete"
-            else:
-                classification_overall = "not_complete"
+    # Backs the cross-page source-card modal (/source-card.js) — a click on
+    # a source id anywhere (home/prep's tables, column_mapping's header)
+    # opens the same read-only summary: a few highlighted metadata.yaml
+    # fields plus the same per-stage status source_row() already computes
+    # for the dashboard, so the two are always consistent. Absolute path
+    # (not under any one tool's url_prefix) since every page needs to reach
+    # it regardless of which tool it's actually served from.
+    @app.route("/api/source_info/<source_id>")
+    def api_source_info(source_id):
+        if source_id not in set(source_ids()):
+            return jsonify({"error": "no such source"}), 404
 
-            result.append({
-                "source_id": source_id,
-                # collection/ — what the collection checklist tool produces:
-                # metadata.yaml and the raw file landing on disk.
-                "collection": {
-                    "metadata": source_metadata_status(source_id, config),
-                    "raw": source_raw_data_status(source_id, config),
-                    # For the raw pill's info modal (app.js) — reuses
-                    # column_mapping_status's own read of metadata.yaml rather
-                    # than a second one, since cm is already computed above.
-                    "raw_filename": cm["raw_filename"],
-                },
-                # tools/ (displayed as "Prep") — human-reviewed decisions
-                # needed before the rest of the pipeline can run, plus
-                # preprocessing itself: mechanical (no review UI of its own),
-                # but it sits here rather than in pipeline/ below because
-                # classification can't run without it — it reads the
-                # standardized columns preprocessing produces, not raw ones.
-                "tools": {
-                    "column_mapping": cm["column_map_status"],
-                    "preprocessing": preprocessing_status(source_id, config),
-                    "classification": classification_overall,
-                },
-                # pipeline/ — mechanical processing with no human decisions
-                # of its own. Validation is a placeholder — no automated-
-                # check step exists yet (geomerge.config.yaml's "validate" stage
-                # is still commented out) — "not_built" rather than
-                # "not_started" so it doesn't read as "you have work to do"
-                # when the real answer is "there's nothing here yet".
-                "pipeline": {
-                    "processing": processing_status(source_id, config),
-                    "validation": "not_built",
-                },
-            })
-        return jsonify(result)
+        metadata_path = sources_dir / source_id / "metadata.yaml"
+        metadata = yaml.safe_load(metadata_path.read_text()) or {} if metadata_path.exists() else {}
+
+        row = source_row(source_id)
+        row["metadata"] = {
+            "provider_id": metadata.get("provider_id", ""),
+            "dataset_page_url": metadata.get("dataset_page_url", ""),
+            "format": metadata.get("format", ""),
+            "license_name": metadata.get("license_name", ""),
+            "license_url": metadata.get("license_url", ""),
+            "retrieved_date": metadata.get("retrieved_date", ""),
+            "notes": metadata.get("notes", ""),
+        }
+        return jsonify(row)
 
     return app
 

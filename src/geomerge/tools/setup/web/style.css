@@ -470,7 +470,8 @@ button:hover {
   white-space: nowrap;
 }
 
-.rule-term-type {
+.rule-term-behavior,
+.rule-term-mode {
   flex-shrink: 0;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
@@ -478,22 +479,30 @@ button:hover {
   font-weight: 600;
 }
 
-/* Blue/green/red — a distinct accent per type, not the panel-generic gray
-   the usage-badge/summary text elsewhere uses, since telling exact from
-   contains from excludes at a glance is the whole point of the badge. */
-.rule-term-type-exact {
-  background: color-mix(in srgb, var(--ctp-blue) 20%, var(--color-panel-bg));
-  color: var(--ctp-blue);
-}
-
-.rule-term-type-contains {
+/* Two independent badges, not one compound label — behavior (match/exclude,
+   green/red, reusing the same allow/block semantic as flag-yes/flag-no
+   elsewhere) and mode (exact/contains, blue/mauve, a neutral pair not
+   already meaningful as a status color) are two separate questions about a
+   term, so they get two separate at-a-glance colors instead of one 4-way
+   label you'd have to parse every time. */
+.rule-term-behavior-match {
   background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
   color: var(--ctp-green);
 }
 
-.rule-term-type-excludes {
+.rule-term-behavior-exclude {
   background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
   color: var(--ctp-red);
+}
+
+.rule-term-mode-exact {
+  background: color-mix(in srgb, var(--ctp-blue) 20%, var(--color-panel-bg));
+  color: var(--ctp-blue);
+}
+
+.rule-term-mode-contains {
+  background: color-mix(in srgb, var(--ctp-mauve) 20%, var(--color-panel-bg));
+  color: var(--ctp-mauve);
 }
 
 .rule-add-row {

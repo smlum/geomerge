@@ -9,6 +9,8 @@
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/nav.css" />
   <link rel="stylesheet" href="/table.css" />
+  <link rel="stylesheet" href="/modal.css" />
+  <link rel="stylesheet" href="/source-card.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -16,7 +18,7 @@
     <a href="/" class="geomerge-brand">geomerge</a>
     <div class="geomerge-tabs">
       <a href="/" class="geomerge-tab tab-blue">Home</a>
-      <a href="/setup/" class="geomerge-tab tab-cyan">Setup</a>
+      <a href="/setup/" class="geomerge-tab tab-lavender">Setup</a>
       <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
       <a href="/prep/" class="geomerge-tab active tab-purple">Prepare</a>
       <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
@@ -63,6 +65,27 @@
   <footer class="geomerge-footer">
     <span id="progress" class="meta"></span>
   </footer>
+
+  <!-- Cross-page source-info card (see /source-card.js) — a click on any
+       source id opens metadata highlights + the full per-stage status
+       summary. -->
+  <div id="source-card-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="source-card-title"></h2>
+        <button id="source-card-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="source-card-body"></div>
+    </div>
+  </div>
+
+  <script src="/source-card.js"></script>
   <script src="app.js"></script>
+  <script>
+    document.getElementById("source-card-close").addEventListener("click", closeSourceCard);
+    document.getElementById("source-card-modal").addEventListener("click", (e) => {
+      if (e.target.id === "source-card-modal") closeSourceCard();
+    });
+  </script>
 </body>
 </html>

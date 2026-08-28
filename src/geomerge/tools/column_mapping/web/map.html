@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/nav.css" />
   <link rel="stylesheet" href="/table.css" />
   <link rel="stylesheet" href="/modal.css" />
+  <link rel="stylesheet" href="/source-card.css" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/hljs-theme.css" />
 </head>
@@ -18,7 +19,7 @@
     <a href="/" class="geomerge-brand">geomerge</a>
     <div class="geomerge-tabs">
       <a href="/" class="geomerge-tab tab-blue">Home</a>
-      <a href="/setup/" class="geomerge-tab tab-cyan">Setup</a>
+      <a href="/setup/" class="geomerge-tab tab-lavender">Setup</a>
       <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
       <a href="/prep/" class="geomerge-tab active tab-purple">Prepare</a>
       <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
@@ -44,43 +45,47 @@
         <button type="button" id="rules-edit-link" class="link-btn">Edit</button>
       </div>
     </div>
-    <a id="source-link" class="source-link hidden" href="#" target="_blank" rel="noopener">View source &#8599;</a>
+    <a href="/prep/" class="back-link">&larr; Back</a>
   </header>
 
-  <div class="table-scroll">
-    <table id="rows">
-      <colgroup>
-        <col style="width: 200px" />
-        <col style="width: 150px" />
-        <col style="width: 70px" />
-        <col style="width: 70px" />
-        <col style="width: 260px" />
-        <col style="width: 220px" />
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Raw column</th>
-          <th>Type</th>
-          <th>Nulls</th>
-          <th>Unique</th>
-          <th>Samples</th>
-          <th>Target</th>
-        </tr>
-      </thead>
-      <tbody id="rows-body"></tbody>
-    </table>
-  </div>
+  <div class="content-area">
+    <div class="table-scroll">
+      <table id="rows">
+        <colgroup>
+          <col style="width: 200px" />
+          <col style="width: 150px" />
+          <col style="width: 70px" />
+          <col style="width: 70px" />
+          <col style="width: 260px" />
+          <col style="width: 220px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Raw column</th>
+            <th>Type</th>
+            <th>Nulls</th>
+            <th>Unique</th>
+            <th>Samples</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody id="rows-body"></tbody>
+      </table>
+    </div>
 
-  <div id="missing-targets" class="missing-targets hidden"></div>
+    <div id="missing-targets" class="missing-targets hidden"></div>
 
-  <div class="save-row">
-    <button id="save-next-btn">Save &amp; next</button>
-    <button id="save-back-btn">Save &amp; back to home</button>
-    <button id="flag-next-btn" type="button">&#9873; Flag &amp; next</button>
+    <div class="save-row">
+      <button id="save-next-btn">Save &amp; next</button>
+      <button id="flag-next-btn" type="button">&#9873; Flag &amp; next</button>
+    </div>
   </div>
 
   <footer class="geomerge-footer">
-    <button type="button" id="footer-file-link" class="footer-file-link meta"></button>
+    <span class="footer-file-group">
+      <span class="meta">editing:</span>
+      <button type="button" id="footer-file-link" class="footer-file-link meta"></button>
+    </span>
     <span class="meta">&middot;</span>
     <span id="mapped-count" class="meta"></span>
     <span id="save-status" class="meta"></span>
@@ -95,9 +100,11 @@
 
       <div id="rules-list-view">
         <div class="meta rules-intro">
-          First-pass suggestions when mapping a raw column to a target field — an <strong>exact</strong>
-          term only matches a raw column name equal to it; a <strong>contains</strong> term matches equal
-          or substring, either direction.
+          First-pass suggestions when mapping a raw column to a target field. An <strong>exact</strong>
+          term only matches a raw column name equal to it; a <strong>contains</strong> term matches when
+          found anywhere inside the raw name — if more than one target's contains term matches, the
+          longest (most specific) one wins. An <strong>exclude</strong> term (exact or contains, same two
+          modes) blocks a raw name from ever matching this target, regardless of any other rule.
         </div>
         <div id="rules-targets-body"></div>
       </div>
@@ -107,10 +114,13 @@
         <div id="rule-terms-body"></div>
         <div class="rule-add-row">
           <input type="text" id="rule-new-term" placeholder="raw column name or term" />
-          <select id="rule-new-type">
+          <select id="rule-new-behavior">
+            <option value="match" selected>Match</option>
+            <option value="exclude">Exclude</option>
+          </select>
+          <select id="rule-new-mode">
             <option value="exact">Exact</option>
             <option value="contains" selected>Contains</option>
-            <option value="excludes">Excludes</option>
           </select>
           <button type="button" id="rule-add-btn">+ Add</button>
         </div>
@@ -135,16 +145,34 @@
     </div>
   </div>
 
+  <!-- Cross-page source-info card (see /source-card.js) — clicking the
+       Source ID value above opens metadata highlights + the full per-stage
+       status summary. -->
+  <div id="source-card-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="source-card-title"></h2>
+        <button id="source-card-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="source-card-body"></div>
+    </div>
+  </div>
+
   <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
   <script src="/file-preview.js"></script>
   <script src="/nav.js"></script>
   <script src="/rule-editor.js"></script>
+  <script src="/source-card.js"></script>
   <script src="map.js"></script>
   <script src="rules-modal.js"></script>
   <script>
     document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
     document.getElementById("file-preview-modal").addEventListener("click", (e) => {
       if (e.target.id === "file-preview-modal") closeFilePreview();
+    });
+    document.getElementById("source-card-close").addEventListener("click", closeSourceCard);
+    document.getElementById("source-card-modal").addEventListener("click", (e) => {
+      if (e.target.id === "source-card-modal") closeSourceCard();
     });
   </script>
 </body>
