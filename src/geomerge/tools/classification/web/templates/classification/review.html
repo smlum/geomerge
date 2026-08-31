@@ -3,7 +3,9 @@
 {% block title %}Classify{% endblock %}
 
 {% block extra_head %}
+  <link rel="stylesheet" href="/modal.css" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/hljs-theme.css" />
 {% endblock %}
 
 {% block header_content %}
@@ -11,7 +13,10 @@
     <h1>Classification</h1>
     <div id="source-label" class="meta source-label"></div>
     <div id="file-paths" class="meta file-paths"></div>
-    <div id="subtitle" class="meta"></div>
+    <div class="meta rules-line">
+      Applying rules from: <code>classification_matching_rules.yaml</code> —
+      <a id="rules-edit-link" class="link-btn" href="/setup/classification_matching_rules.html">Edit</a>
+    </div>
   </div>
   <a href="/prep/" class="back-link">&larr; Back</a>
 {% endblock %}
@@ -24,8 +29,10 @@
     <div id="targets"></div>
 
     <div class="save-row">
-      <button id="save-next-btn">Next source &rarr;</button>
-      <button id="save-back-btn">&larr; Back to home</button>
+      <div class="save-row-buttons">
+        <button id="save-next-btn">Save &amp; next &rarr;</button>
+        <button id="save-back-btn" type="button">&larr; Save &amp; back to home</button>
+      </div>
     </div>
   </div>
 {% endblock %}
@@ -33,12 +40,36 @@
 {% block footer %}
   <span class="footer-file-group">
     <span class="meta">editing:</span>
-    <span id="footer-file-path" class="meta"></span>
+    <button type="button" id="footer-file-link" class="footer-file-link meta"></button>
   </span>
   <span class="meta">&middot;</span>
   <span id="classified-count" class="meta"></span>
+  <span id="save-status" class="meta"></span>
+{% endblock %}
+
+{% block modals %}
+  <div id="file-preview-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2 id="file-preview-title"></h2>
+          <div id="file-preview-path" class="meta"></div>
+        </div>
+        <button id="file-preview-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <pre id="file-preview-content" class="code-block hljs"></pre>
+    </div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
+  <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+  <script src="/file-preview.js"></script>
   <script src="review.js"></script>
+  <script>
+    document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
+    document.getElementById("file-preview-modal").addEventListener("click", (e) => {
+      if (e.target.id === "file-preview-modal") closeFilePreview();
+    });
+  </script>
 {% endblock %}

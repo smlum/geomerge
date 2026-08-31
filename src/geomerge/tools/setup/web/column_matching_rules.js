@@ -79,7 +79,7 @@ function closeRuleModal() {
 }
 
 async function saveRule() {
-  const saved = await ruleEditorSave(activeTarget.name);
+  const saved = await ruleEditorSave(`/setup/api/column-matching-rules/${encodeURIComponent(activeTarget.name)}`);
   if (!saved) return;
   activeTarget.exact = saved.exact;
   activeTarget.contains = saved.contains;

@@ -123,42 +123,10 @@ input[type="text"] {
   color: var(--color-text);
 }
 
-.confidence {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.confidence-exact {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
-}
-
-.confidence-substring {
-  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-.save-state {
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.save-state-saved {
-  color: var(--ctp-green);
-}
-
-.save-state-unsaved {
-  color: var(--color-text-secondary);
-}
-
 /* page-shell.css's shared .save-row adds justify-content: space-between
-   for column-mapping's "buttons left, status pill right" layout — this
-   page's two buttons (Next source, Back to home) belong together on the
-   left instead, same as before that shared rule existed. */
+   for column-mapping's "status pill on the right" layout — this page has
+   no such right-hand content, so its two buttons stay together on the
+   left instead. */
 .save-row {
   justify-content: flex-start;
 }
@@ -177,8 +145,88 @@ input[type="text"] {
   background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
 }
 
+#save-back-btn:disabled,
+#save-next-btn:disabled {
+  background: var(--ctp-surface1);
+  border-color: var(--ctp-surface1);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
 .sv-btn {
   white-space: nowrap;
+}
+
+/* --- Header "Applying rules from: ... — Edit" line + footer file link,
+   same shape/classes as column_mapping's own style.css — duplicated rather
+   than shared, same as every other tool-specific bit here. --- */
+.rules-line {
+  margin-bottom: 0.2rem;
+}
+
+.rules-line code {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--ctp-mauve);
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.link-btn:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+/* Deliberately doesn't touch font-family/font-size/color — always paired
+   with class="meta" on the same element (see review.html), and "inherit"
+   would pull from the parent footer instead of picking up that sibling
+   class's own values. */
+.footer-file-link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.footer-file-link:hover {
+  background: none;
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.modal-title-block {
+  min-width: 0;
+}
+
+#file-preview-path {
+  margin-top: 0.15rem;
+  word-break: break-all;
+}
+
+.code-block {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.code-block.hljs {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
 }
 
 /* Street View modal — one shared instance, always centered, so it's never

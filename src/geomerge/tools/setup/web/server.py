@@ -27,6 +27,7 @@ import yaml
 from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config
+from geomerge.helpers.schema import get_field
 from geomerge.tools.setup.usage import build_usage_index, enum_value_sources, usage_detail, usage_summary
 
 # Canonical key order for a field dict written back to disk — GET responses
@@ -50,6 +51,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
     repo_root = config["repo_root"]
     target_schema_path = repo_root / config["target_schema"]
     column_matching_rules_path = repo_root / config["tools"]["column_mapping"]["matching_rules"]
+    classification_targets = config["tools"]["classification"]["targets"]
+    classification_matching_rules_path = repo_root / config["tools"]["classification"]["matching_rules"]
 
     bp = Blueprint(
         "setup", __name__,
@@ -63,6 +66,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def load_column_matching_rules() -> dict:
         return yaml.safe_load(column_matching_rules_path.read_text()) or {} if column_matching_rules_path.exists() else {}
 
+    def load_classification_matching_rules() -> dict:
+        if not classification_matching_rules_path.exists():
+            return {}
+        return yaml.safe_load(classification_matching_rules_path.read_text()) or {}
+
     @bp.route("/")
     def index():
         return render_template("setup/index.html", active_tab="setup")
@@ -74,6 +82,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
     @bp.route("/column_matching_rules.html")
     def column_matching_rules_page():
         return render_template("setup/column_matching_rules.html", active_tab="setup")
+
+    @bp.route("/classification_matching_rules.html")
+    def classification_matching_rules_page():
+        return render_template("setup/classification_matching_rules.html", active_tab="setup")
 
     @bp.route("/api/schema/fields")
     def api_schema_get():
@@ -234,10 +246,88 @@ def create_blueprint(config: dict = None) -> Blueprint:
     @bp.route("/api/column-matching-rules/raw")
     def api_column_matching_rules_get_raw():
         if not column_matching_rules_path.exists():
-            return jsonify({"error": "not found"}), 404
+            return jsonify({"error": f"{column_matching_rules_path.name} hasn't been created yet — no rules saved yet."}), 404
         return jsonify({
             "content": column_matching_rules_path.read_text(),
             "path": str(column_matching_rules_path.relative_to(repo_root)),
+        })
+
+    # One level deeper than column matching rules: a classification target
+    # (canbics_class, status, ...) has an *enum* of possible values (schema/
+    # ccnd.yaml's `categories`), and rules are matched per-value against the
+    # raw source value, not per-target against a raw column name — see
+    # classification/web/server.py's suggest_target(). A target with no enum
+    # defined yet (surface_type/snow_removal, as of writing) gets
+    # options: null so the page can show "no enum yet" instead of an empty
+    # value list.
+    @bp.route("/api/classification-matching-rules")
+    def api_classification_matching_rules_get():
+        rules = load_classification_matching_rules()
+        targets = []
+        for name, target_config in classification_targets.items():
+            try:
+                field = get_field(target_schema_path, name)
+            except ValueError:
+                field = {}
+            categories = field.get("categories")
+            options = [{"code": c["code"], "label": c.get("label", c["code"])} for c in categories] if categories else None
+
+            target_rules = rules.get(name) or {}
+            values = {}
+            if options:
+                for opt in options:
+                    value_rules = target_rules.get(opt["code"]) or {}
+                    values[opt["code"]] = {
+                        "exact": value_rules.get("exact") or [],
+                        "contains": value_rules.get("contains") or [],
+                        "excludes": value_rules.get("excludes") or [],
+                        "excludes_contains": value_rules.get("excludes_contains") or [],
+                    }
+
+            targets.append({
+                "name": name,
+                "description": field.get("description", ""),
+                "source_columns": target_config.get("source_columns", []),
+                "options": options,
+                "values": values,
+            })
+        return jsonify({"targets": targets})
+
+    # Per-(target, value) upsert, same shape/reasoning as
+    # /api/column-matching-rules/<target> — no confirm-step risk to gate
+    # since nothing downstream keys off rule *content*, only whether a
+    # target has rules at all.
+    @bp.route("/api/classification-matching-rules/<target>/<value>", methods=["POST"])
+    def api_classification_matching_rules_save(target, value):
+        if target not in classification_targets:
+            return jsonify({"error": f"unknown target '{target}'"}), 400
+
+        body = request.get_json()
+        exact = [t.strip() for t in (body.get("exact") or []) if t.strip()]
+        contains = [t.strip() for t in (body.get("contains") or []) if t.strip()]
+        excludes = [t.strip() for t in (body.get("excludes") or []) if t.strip()]
+        excludes_contains = [t.strip() for t in (body.get("excludes_contains") or []) if t.strip()]
+
+        rules = load_classification_matching_rules()
+        rules.setdefault(target, {})[value] = {
+            "exact": exact,
+            "contains": contains,
+            "excludes": excludes,
+            "excludes_contains": excludes_contains,
+        }
+
+        classification_matching_rules_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(classification_matching_rules_path, "w") as f:
+            yaml.dump(rules, f, sort_keys=False, allow_unicode=True)
+        return jsonify({"ok": True})
+
+    @bp.route("/api/classification-matching-rules/raw")
+    def api_classification_matching_rules_get_raw():
+        if not classification_matching_rules_path.exists():
+            return jsonify({"error": f"{classification_matching_rules_path.name} hasn't been created yet — no rules saved yet."}), 404
+        return jsonify({
+            "content": classification_matching_rules_path.read_text(),
+            "path": str(classification_matching_rules_path.relative_to(repo_root)),
         })
 
     return bp

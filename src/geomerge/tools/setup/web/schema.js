@@ -6,10 +6,56 @@ let schemaName = "";
 let schemaDescription = "";
 let fields = [];
 
+// Every save is still whole-document (see save() — one POST with the
+// entire fields array, same as every other save in this app), but each row's
+// own Save button only lights up for that row's own pending edit, tracked
+// by field object identity (fields keeps the same object references across
+// re-renders unless a field is actually added/removed, so this survives a
+// render() triggered by editing a *different* row — a plain local variable
+// inside renderFieldRow wouldn't, since render() rebuilds every row's
+// closures from scratch). structuralChange covers add/remove: a deletion
+// has no row left to "own" the pending change, so once the field list
+// itself has changed shape, every remaining row's Save can carry it
+// through — clicking any of them saves the current list either way.
+let dirtyFields = new Set();
+let structuralChange = false;
+let isSaving = false;
+let rowSaveButtons = new Map(); // field -> its <button class="row-save-btn">, rebuilt fresh each render()
+let draggedField = null; // set for the duration of a drag — see renderFieldRow's drag-handle wiring
+
+function fieldSaveEnabled(field) {
+  const hasBlankName = fields.some((f) => !f.name.trim());
+  return (dirtyFields.has(field) || structuralChange) && !isSaving && !hasBlankName;
+}
+
+// A blank name anywhere blocks every row's Save (the whole-document save
+// would otherwise ship an unnamed field), so typing one has to refresh
+// every OTHER row's button too, not just the row being typed into.
+function refreshAllRowSaveButtons() {
+  for (const [field, btn] of rowSaveButtons) {
+    btn.disabled = !fieldSaveEnabled(field);
+  }
+}
+
 const KNOWN_FIELD_KEYS = [
   "name", "type", "required", "source_mappable", "description",
-  "categories", "geometry_type", "crs", "_usage", "_originalName", "_categoriesExpanded",
+  "categories", "geometry_type", "crs", "_usage", "_originalName",
 ];
+
+// Only sets --nav-height (the sticky header's own `top` offset) — unlike
+// the per-source review pages, there's no scrollable table region below to
+// also reserve space for, just a naturally-flowing list of field rows.
+function updateStickyOffsets() {
+  const nav = document.querySelector(".geomerge-nav");
+  document.documentElement.style.setProperty("--nav-height", `${nav ? nav.offsetHeight : 0}px`);
+}
+window.addEventListener("resize", updateStickyOffsets);
+updateStickyOffsets();
+
+function markDirty(field) {
+  dirtyFields.add(field);
+  refreshAllRowSaveButtons();
+}
 
 async function load() {
   const res = await fetch("api/schema/fields");
@@ -21,6 +67,8 @@ async function load() {
   // renamed" means, both for the live risky-row styling and (server-side,
   // independently) for the confirmation flow at save time.
   fields = data.fields.map((f) => ({ ...f, _originalName: f.name }));
+  dirtyFields = new Set();
+  structuralChange = false;
   render();
 }
 
@@ -46,6 +94,7 @@ function checkboxLabel(text, obj, key, tooltip) {
   input.addEventListener("change", () => {
     if (input.checked) obj[key] = true;
     else delete obj[key];
+    markDirty(obj);
   });
   label.appendChild(input);
   label.appendChild(document.createTextNode(text));
@@ -63,12 +112,9 @@ function categoricalCheckbox(field) {
   input.type = "checkbox";
   input.checked = field.categories !== undefined;
   input.addEventListener("change", () => {
-    if (input.checked) {
-      field.categories = field.categories || [];
-      field._categoriesExpanded = true; // land straight in edit mode — an empty list has nothing worth collapsing
-    } else {
-      delete field.categories;
-    }
+    if (input.checked) field.categories = field.categories || [];
+    else delete field.categories;
+    markDirty(field);
     render();
   });
   label.appendChild(input);
@@ -85,44 +131,40 @@ function smallTextInput(placeholder, obj, key) {
   input.addEventListener("input", () => {
     if (input.value) obj[key] = input.value;
     else delete obj[key];
+    markDirty(obj);
   });
   return input;
 }
 
-function categoryLabel(category) {
-  return category.label || category.code || "(unnamed)";
-}
-
 // Categories are code/label/description records (schema/ccnd.yaml's
-// `categories`, see setup/web/server.py) — enough real estate per value
-// that every categorical field showing all of it by default would make the
-// page unreadable (this is exactly the complaint that got the field-row
-// layout redone). Collapsed by default: a one-line summary of labels, with
-// an "Edit categories" toggle into the real per-value editor.
+// `categories`, see setup/web/server.py) — always shown in full (a code/
+// label/description this important is worth the real estate; a collapsed
+// summary just hid what you came here to check). A header row names the
+// three columns since, once every row is actually filled in, three bare
+// text inputs in a row give no clue which is which.
 function renderCategoriesEditor(field) {
   const wrap = document.createElement("div");
   wrap.className = "categories-editor";
 
-  if (!field._categoriesExpanded) {
-    const summary = document.createElement("div");
-    summary.className = "categories-summary";
-    const list = document.createElement("span");
-    list.className = "categories-summary-list";
-    list.textContent = field.categories.length ? field.categories.map(categoryLabel).join(", ") : "(no categories yet)";
-    summary.appendChild(list);
-
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "link-btn";
-    editBtn.textContent = "Edit categories";
-    editBtn.addEventListener("click", () => {
-      field._categoriesExpanded = true;
-      render();
-    });
-    summary.appendChild(editBtn);
-
-    wrap.appendChild(summary);
-    return wrap;
+  if (field.categories.length) {
+    const header = document.createElement("div");
+    header.className = "category-row category-header";
+    const codeHeader = document.createElement("span");
+    codeHeader.className = "category-code";
+    codeHeader.textContent = "Code";
+    header.appendChild(codeHeader);
+    const labelHeader = document.createElement("span");
+    labelHeader.className = "category-label";
+    labelHeader.textContent = "Label";
+    header.appendChild(labelHeader);
+    const descHeader = document.createElement("span");
+    descHeader.className = "category-description";
+    descHeader.textContent = "Description";
+    header.appendChild(descHeader);
+    const spacer = document.createElement("span");
+    spacer.className = "category-header-spacer";
+    header.appendChild(spacer);
+    wrap.appendChild(header);
   }
 
   for (const category of field.categories) {
@@ -136,6 +178,7 @@ function renderCategoriesEditor(field) {
     codeInput.value = category.code || "";
     codeInput.addEventListener("input", () => {
       category.code = codeInput.value;
+      markDirty(field);
     });
     row.appendChild(codeInput);
 
@@ -147,6 +190,7 @@ function renderCategoriesEditor(field) {
     labelInput.addEventListener("input", () => {
       if (labelInput.value) category.label = labelInput.value;
       else delete category.label;
+      markDirty(field);
     });
     row.appendChild(labelInput);
 
@@ -158,6 +202,7 @@ function renderCategoriesEditor(field) {
     descInput.addEventListener("input", () => {
       if (descInput.value) category.description = descInput.value;
       else delete category.description;
+      markDirty(field);
     });
     row.appendChild(descInput);
 
@@ -168,6 +213,7 @@ function renderCategoriesEditor(field) {
     removeBtn.title = "Remove this category";
     removeBtn.addEventListener("click", () => {
       field.categories = field.categories.filter((c) => c !== category);
+      markDirty(field);
       render();
     });
     row.appendChild(removeBtn);
@@ -183,22 +229,23 @@ function renderCategoriesEditor(field) {
   addBtn.textContent = "+ Add category";
   addBtn.addEventListener("click", () => {
     field.categories.push({ code: "" });
+    markDirty(field);
     render();
   });
   controls.appendChild(addBtn);
 
-  const collapseBtn = document.createElement("button");
-  collapseBtn.type = "button";
-  collapseBtn.className = "link-btn";
-  collapseBtn.textContent = "Collapse";
-  collapseBtn.addEventListener("click", () => {
-    field._categoriesExpanded = false;
-    render();
-  });
-  controls.appendChild(collapseBtn);
-
   wrap.appendChild(controls);
   return wrap;
+}
+
+// Only the two things that are unambiguously "not done yet" for a field —
+// not a style opinion (e.g. short descriptions are fine) — since the whole
+// point is flagging missing essentials, not nagging about everything.
+function fieldWarningText(field) {
+  const issues = [];
+  if (!field.description) issues.push("missing description");
+  if (field.categories !== undefined && field.categories.length === 0) issues.push("no categories yet");
+  return issues.join(" · ");
 }
 
 function renderFieldRow(field) {
@@ -209,6 +256,49 @@ function renderFieldRow(field) {
   const wasInUse = Boolean(field._usage && field._usage.in_use);
   const risky = renamed && wasInUse;
   row.classList.toggle("is-risky", risky);
+
+  // Drag handle — deliberately its own small element, not the whole row,
+  // so pressing into a text input/select to edit or select text never gets
+  // mistaken for a drag start. Field order isn't read positionally anywhere
+  // in the pipeline (matching/classification/every pipeline step look
+  // fields up by name), so reordering only affects the final output's
+  // column order and this editor's own readability — nothing to break.
+  const dragHandle = document.createElement("div");
+  dragHandle.className = "drag-handle";
+  dragHandle.title = "Drag to reorder";
+  dragHandle.textContent = "⠿";
+  dragHandle.draggable = true;
+  dragHandle.addEventListener("dragstart", (e) => {
+    draggedField = field;
+    row.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+  dragHandle.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
+    draggedField = null;
+  });
+  row.appendChild(dragHandle);
+
+  row.addEventListener("dragover", (e) => {
+    if (!draggedField || draggedField === field) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    row.classList.add("drag-over");
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+  row.addEventListener("drop", (e) => {
+    e.preventDefault();
+    row.classList.remove("drag-over");
+    if (!draggedField || draggedField === field) return;
+    const fromIdx = fields.indexOf(draggedField);
+    fields.splice(fromIdx, 1);
+    const toIdx = fields.indexOf(field); // recomputed after removal, so it's correct dragging either direction
+    fields.splice(toIdx, 0, draggedField);
+    // No single row "owns" a reorder any more than a removal does — see
+    // structuralChange's own comment — so any row's Save can commit it.
+    structuralChange = true;
+    render();
+  });
 
   const content = document.createElement("div");
   content.className = "field-row-content";
@@ -232,6 +322,7 @@ function renderFieldRow(field) {
     row.classList.toggle("is-risky", nowRisky);
     const badge = content.querySelector(".usage-badge");
     if (badge) badge.classList.toggle("is-risky", nowRisky);
+    markDirty(field);
   });
   line1.appendChild(nameInput);
 
@@ -246,6 +337,7 @@ function renderFieldRow(field) {
   }
   typeSelect.addEventListener("change", () => {
     field.type = typeSelect.value;
+    markDirty(field);
     render();
   });
   line1.appendChild(typeSelect);
@@ -258,6 +350,17 @@ function renderFieldRow(field) {
     "Can be assigned a raw column in the column-mapping tool — turn this on for any field a source's raw data actually fills in."
   ));
   line1.appendChild(categoricalCheckbox(field));
+
+  const warningBadge = document.createElement("span");
+  warningBadge.className = "field-warning";
+  const updateWarning = () => {
+    const text = fieldWarningText(field);
+    warningBadge.textContent = text;
+    warningBadge.classList.toggle("hidden", !text);
+  };
+  updateWarning();
+  line1.appendChild(warningBadge);
+
   content.appendChild(line1);
 
   // geometry_type/crs ride along with the identity line — rare (today,
@@ -280,6 +383,8 @@ function renderFieldRow(field) {
   descInput.addEventListener("input", () => {
     if (descInput.value) field.description = descInput.value;
     else delete field.description;
+    updateWarning();
+    markDirty(field);
   });
   content.appendChild(descInput);
 
@@ -307,15 +412,37 @@ function renderFieldRow(field) {
 
   row.appendChild(content);
 
+  const actions = document.createElement("div");
+  actions.className = "field-row-actions";
+
+  // Whole-document save() (see save() — one POST with every field, same as
+  // every other save in this app), but this button's own enabled state only
+  // reflects THIS field's pending edit (fieldSaveEnabled) — see the big
+  // comment at the top of the file on why that needs dirtyFields rather
+  // than a plain local variable.
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "row-save-btn";
+  saveBtn.textContent = "Save";
+  saveBtn.disabled = !fieldSaveEnabled(field);
+  saveBtn.addEventListener("click", () => save());
+  rowSaveButtons.set(field, saveBtn);
+  actions.appendChild(saveBtn);
+
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "btn-danger";
   removeBtn.textContent = "Remove";
   removeBtn.addEventListener("click", () => {
     fields = fields.filter((f) => f !== field);
+    // A deletion has no row left of its own to carry it — see
+    // structuralChange's own comment up top.
+    structuralChange = true;
     render();
   });
-  row.appendChild(removeBtn);
+  actions.appendChild(removeBtn);
+
+  row.appendChild(actions);
 
   return row;
 }
@@ -323,6 +450,7 @@ function renderFieldRow(field) {
 function render() {
   const body = document.getElementById("fields-body");
   body.innerHTML = "";
+  rowSaveButtons.clear(); // every row's closures (and its Save button) are rebuilt fresh below
   for (const field of fields) {
     body.appendChild(renderFieldRow(field));
   }
@@ -339,7 +467,6 @@ function stripInternalKeys(field) {
   const clean = { ...field };
   delete clean._usage;
   delete clean._originalName;
-  delete clean._categoriesExpanded;
   clean._original_name = field._originalName;
   return clean;
 }
@@ -347,37 +474,6 @@ function stripInternalKeys(field) {
 function sourceList(ids, max = 8) {
   if (ids.length <= max) return ids.join(", ");
   return `${ids.slice(0, max).join(", ")}, +${ids.length - max} more`;
-}
-
-function buildWarningMessage(data) {
-  const lines = ["Saving will remove or rename fields/values still referenced by real sources or config:", ""];
-
-  for (const [name, detail] of Object.entries(data.unacknowledged_removed_fields || {})) {
-    lines.push(`  ${name}:`);
-    if (detail.column_map_sources.length) {
-      lines.push(`    - column_map.yaml in ${detail.column_map_sources.length} source(s): ${sourceList(detail.column_map_sources)}`);
-    }
-    if (detail.classification_target_sources.length) {
-      lines.push(`    - a classification target in ${detail.classification_target_sources.length} source(s): ${sourceList(detail.classification_target_sources)}`);
-    }
-    if (detail.classification_source_column_sources.length) {
-      lines.push(`    - a classification source column in ${detail.classification_source_column_sources.length} source(s)`);
-    }
-    if (detail.config_target) lines.push("    - a classification target in geomerge.config.yaml");
-    if (detail.config_source_column_of.length) lines.push(`    - a source column of ${detail.config_source_column_of.join(", ")} in geomerge.config.yaml`);
-    if (detail.column_matching_rule) lines.push("    - has a column matching rule");
-    if (detail.classification_matching_rule_values.length) lines.push("    - has classification matching rules");
-  }
-
-  for (const [fname, values] of Object.entries(data.unacknowledged_removed_enum_values || {})) {
-    for (const [value, sources] of Object.entries(values)) {
-      lines.push(`  ${fname}: "${value}" is a saved answer for ${sources.length} source(s): ${sourceList(sources)}`);
-    }
-  }
-
-  lines.push("");
-  lines.push("Those files will NOT be updated automatically. Save anyway?");
-  return lines.join("\n");
 }
 
 function mergeAcked(existing, additional) {
@@ -388,9 +484,89 @@ function mergeAcked(existing, additional) {
   return merged;
 }
 
+// Every field row has its own Save trigger (see renderFieldRow) — disable
+// all of them for the duration so a second click mid-flight can't fire an
+// overlapping save, same reasoning as every other multi-step save flow in
+// this app.
+function setSchemaSaving(inProgress) {
+  isSaving = inProgress;
+  refreshAllRowSaveButtons();
+}
+
+// Replaces a plain window.confirm() with the same modal chrome as every
+// other confirmation in this app — the risky-removal warning can be long
+// (many affected sources), which a native confirm() renders as an
+// unstyled, unscrollable OS dialog. Resolves true ("Save anyway") or false
+// (Cancel/close) — save() awaits it exactly where confirm() used to be.
+let pendingRiskyResolve = null;
+
+function renderRiskyDetail(text) {
+  const li = document.createElement("li");
+  li.textContent = text;
+  return li;
+}
+
+function showRiskyModal(data) {
+  const body = document.getElementById("risky-save-body");
+  body.innerHTML = "";
+
+  for (const [name, detail] of Object.entries(data.unacknowledged_removed_fields || {})) {
+    const item = document.createElement("li");
+    const strong = document.createElement("strong");
+    strong.textContent = name;
+    item.appendChild(strong);
+
+    const sub = document.createElement("ul");
+    if (detail.column_map_sources.length) {
+      sub.appendChild(renderRiskyDetail(`column_map.yaml in ${detail.column_map_sources.length} source(s): ${sourceList(detail.column_map_sources)}`));
+    }
+    if (detail.classification_target_sources.length) {
+      sub.appendChild(renderRiskyDetail(`a classification target in ${detail.classification_target_sources.length} source(s): ${sourceList(detail.classification_target_sources)}`));
+    }
+    if (detail.classification_source_column_sources.length) {
+      sub.appendChild(renderRiskyDetail(`a classification source column in ${detail.classification_source_column_sources.length} source(s)`));
+    }
+    if (detail.config_target) sub.appendChild(renderRiskyDetail("a classification target in geomerge.config.yaml"));
+    if (detail.config_source_column_of.length) {
+      sub.appendChild(renderRiskyDetail(`a source column of ${detail.config_source_column_of.join(", ")} in geomerge.config.yaml`));
+    }
+    if (detail.column_matching_rule) sub.appendChild(renderRiskyDetail("has a column matching rule"));
+    if (detail.classification_matching_rule_values.length) sub.appendChild(renderRiskyDetail("has classification matching rules"));
+    item.appendChild(sub);
+
+    body.appendChild(item);
+  }
+
+  for (const [fname, values] of Object.entries(data.unacknowledged_removed_enum_values || {})) {
+    for (const [value, sources] of Object.entries(values)) {
+      const item = document.createElement("li");
+      item.textContent = `${fname}: "${value}" is a saved answer for ${sources.length} source(s): ${sourceList(sources)}`;
+      body.appendChild(item);
+    }
+  }
+
+  document.getElementById("risky-save-modal").classList.remove("hidden");
+}
+
+function riskyModalConfirm(data) {
+  return new Promise((resolve) => {
+    pendingRiskyResolve = resolve;
+    showRiskyModal(data);
+  });
+}
+
+function resolveRiskyModal(confirmed) {
+  document.getElementById("risky-save-modal").classList.add("hidden");
+  if (pendingRiskyResolve) {
+    pendingRiskyResolve(confirmed);
+    pendingRiskyResolve = null;
+  }
+}
+
 async function save(acknowledgedFields = [], acknowledgedEnumValues = {}) {
   const statusEl = document.getElementById("save-status");
   statusEl.textContent = "Saving…";
+  setSchemaSaving(true);
 
   const res = await fetch("api/schema/fields", {
     method: "POST",
@@ -406,7 +582,8 @@ async function save(acknowledgedFields = [], acknowledgedEnumValues = {}) {
   const data = await res.json();
 
   if (res.status === 400 && (data.unacknowledged_removed_fields || data.unacknowledged_removed_enum_values)) {
-    if (confirm(buildWarningMessage(data))) {
+    const confirmed = await riskyModalConfirm(data);
+    if (confirmed) {
       const ackFields = Object.keys(data.unacknowledged_removed_fields || {});
       const ackEnum = {};
       for (const [fname, values] of Object.entries(data.unacknowledged_removed_enum_values || {})) {
@@ -415,23 +592,34 @@ async function save(acknowledgedFields = [], acknowledgedEnumValues = {}) {
       return save([...acknowledgedFields, ...ackFields], mergeAcked(acknowledgedEnumValues, ackEnum));
     }
     statusEl.textContent = "Not saved.";
+    setSchemaSaving(false);
     return;
   }
 
   if (!res.ok) {
     statusEl.textContent = data.error || "Failed to save";
+    setSchemaSaving(false);
     return;
   }
 
   statusEl.textContent = "Saved.";
+  isSaving = false; // load() below resets dirtyFields/structuralChange and re-renders every button fresh
   await load(); // fresh usage info against the schema as it now stands on disk
 }
 
 document.getElementById("add-field-btn").addEventListener("click", () => {
   fields.push({ name: "", type: "string" });
+  // A new field has no prior saved state to be "dirty" relative to, but the
+  // list itself just changed shape — see structuralChange's own comment.
+  structuralChange = true;
   render();
 });
 
-document.getElementById("save-btn").addEventListener("click", () => save());
+document.getElementById("risky-save-close").addEventListener("click", () => resolveRiskyModal(false));
+document.getElementById("risky-save-cancel-btn").addEventListener("click", () => resolveRiskyModal(false));
+document.getElementById("risky-save-confirm-btn").addEventListener("click", () => resolveRiskyModal(true));
+document.getElementById("risky-save-modal").addEventListener("click", (e) => {
+  if (e.target.id === "risky-save-modal") resolveRiskyModal(false);
+});
 
 load();

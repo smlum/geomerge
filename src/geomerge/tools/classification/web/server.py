@@ -194,36 +194,46 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
         return jsonify({"source_id": source_id, "targets": result})
 
+    # Bulk save — every row of the currently-open tab's table in one request,
+    # same "single save button at bottom" model as column_mapping's map.js
+    # rather than each row auto-saving itself on its own click. "entries" is
+    # a list of {values, target_value, method, notes}; a row the reviewer
+    # left blank is simply omitted by the client rather than sent with an
+    # empty target_value, so this endpoint doesn't need to distinguish
+    # "explicitly cleared" from "never touched" — see review.js's save flow.
     @bp.route("/api/classification/<source_id>", methods=["POST"])
     def api_classification_save(source_id):
         data = request.get_json()
         target = data.get("target")
-        values = data.get("values")
-        target_value = (data.get("target_value") or "").strip()
-        method = data.get("method") or "manual"
-        notes = (data.get("notes") or "").strip()
+        entries = data.get("entries") or []
 
         if target not in targets:
             return jsonify({"error": f"unknown target '{target}'"}), 400
-        if not values:
-            return jsonify({"error": "values required"}), 400
-        if not target_value:
-            return jsonify({"error": "target_value required"}), 400
+        if not entries:
+            return jsonify({"error": "entries required"}), 400
 
         columns = targets[target]["source_columns"]
         saved = load_classification_map(source_id)
         target_entry = saved.setdefault(target, {"source_columns": columns, "mappings": []})
         target_entry["source_columns"] = columns
 
-        entry = {"values": values, "target": target_value, "method": method}
-        if notes:
-            entry["notes"] = notes
+        for item in entries:
+            values = item.get("values")
+            target_value = (item.get("target_value") or "").strip()
+            method = item.get("method") or "manual"
+            notes = (item.get("notes") or "").strip()
+            if not values or not target_value:
+                continue
 
-        existing = find_mapping(target_entry["mappings"], columns, values)
-        if existing:
-            target_entry["mappings"][target_entry["mappings"].index(existing)] = entry
-        else:
-            target_entry["mappings"].append(entry)
+            entry = {"values": values, "target": target_value, "method": method}
+            if notes:
+                entry["notes"] = notes
+
+            existing = find_mapping(target_entry["mappings"], columns, values)
+            if existing:
+                target_entry["mappings"][target_entry["mappings"].index(existing)] = entry
+            else:
+                target_entry["mappings"].append(entry)
 
         save_classification_map(source_id, saved)
         return jsonify({"ok": True})
@@ -279,7 +289,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def api_classification_get_raw(source_id):
         path = classification_map_path(source_id)
         if not path.exists():
-            return jsonify({"error": "not found"}), 404
+            return jsonify({"error": f"{path.name} hasn't been created yet — nothing saved for this source yet."}), 404
         return jsonify({"content": path.read_text(), "path": str(path.relative_to(repo_root))})
 
     return bp

@@ -214,7 +214,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def api_column_map_get_raw(source_id):
         out_path = sources_dir / source_id / "column_map.yaml"
         if not out_path.exists():
-            return jsonify({"error": "not found"}), 404
+            return jsonify({"error": f"{out_path.name} hasn't been created yet — nothing saved for this source yet."}), 404
         return jsonify({"content": out_path.read_text(), "path": str(out_path.relative_to(repo_root))})
 
     return bp

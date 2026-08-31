@@ -17,12 +17,22 @@ async function openFilePreview(title, fetchUrl) {
   content.textContent = "Loading…";
   document.getElementById("file-preview-modal").classList.remove("hidden");
 
-  const res = await fetch(fetchUrl);
-  if (!res.ok) {
-    content.textContent = "Failed to load file.";
+  // Any failure here — network, non-JSON body, anything — shows the
+  // server's own message when there is one (e.g. "hasn't been created yet"
+  // for a file nothing has been saved to yet, a real and common case, not
+  // just a bare "Failed to load file." that reads like something broke).
+  let res, data;
+  try {
+    res = await fetch(fetchUrl);
+    data = await res.json();
+  } catch (e) {
+    content.textContent = `Failed to load: ${e}`;
     return;
   }
-  const data = await res.json();
+  if (!res.ok) {
+    content.textContent = data.error || "Failed to load file.";
+    return;
+  }
   document.getElementById("file-preview-path").textContent = data.path;
   content.innerHTML = hljs.highlight(data.content, { language: "yaml" }).value;
 }

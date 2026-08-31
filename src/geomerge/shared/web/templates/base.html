@@ -14,7 +14,7 @@
   {% if include_source_card %}<link rel="stylesheet" href="/source-card.css" />{% endif %}
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body{% block body_class %}{% endblock %}>
   <nav class="geomerge-nav">
     <a href="/" class="geomerge-brand">geomerge</a>
     <div class="geomerge-tabs">

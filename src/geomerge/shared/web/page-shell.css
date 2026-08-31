@@ -170,17 +170,23 @@ select {
   white-space: nowrap;
 }
 
-.status-not_started,
+/* not_started reads as "still todo" — an actionable, distinct color (sky)
+   rather than the same gray as not_applicable, so a row that genuinely
+   needs attention doesn't visually disappear next to one that's exempt
+   from it entirely (see status-not_applicable below). */
+.status-not_started {
+  background: color-mix(in srgb, var(--ctp-sky) 20%, var(--color-panel-bg));
+  color: var(--ctp-sky);
+}
+
+/* not_applicable/not_built read as "no need to touch me" — muted gray and
+   italicized, deliberately quieter than not_started so the two vocabularies
+   ("still todo" vs "nothing to do here") are distinguishable at a glance
+   rather than sharing one gray pill. */
 .status-not_applicable,
 .status-not_built {
   background: var(--ctp-surface0);
   color: var(--color-text-secondary);
-}
-
-/* not_built (the validate stage placeholder) reads as "nothing here yet",
-   not "you have work to do" — same gray as not_started/not_applicable, but
-   italicized to mark it as the odd one out. */
-.status-not_built {
   font-style: italic;
 }
 

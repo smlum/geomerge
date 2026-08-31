@@ -1,14 +1,18 @@
 /* body/*{box-sizing}/h1 all now live in /page-shell.css. header and
-   .geomerge-footer below deliberately DON'T use the shared versions —
-   Setup's pages have no scrolling table region to pin a sticky header/
-   footer against (the hub is a couple of cards, the schema editor is
-   anywhere from a handful to dozens of field rows, no fixed-height region
-   to compute a sticky offset from), so both stay static/fixed here instead
-   of sticky. header explicitly cancels the shared sticky treatment rather
-   than just omitting it, since page-shell.css's header rule would otherwise
-   still apply (only redeclared properties override in CSS, not the whole
-   rule). */
-header {
+   .geomerge-footer below deliberately DON'T use the shared versions on most
+   Setup pages — the hub is a couple of cards, the rules editors are short
+   lists, no fixed-height scrolling region to pin a sticky header/footer
+   against — so both stay static/fixed there instead of sticky. header
+   explicitly cancels the shared sticky treatment rather than just omitting
+   it, since page-shell.css's header rule would otherwise still apply (only
+   redeclared properties override in CSS, not the whole rule).
+
+   schema.html is the exception (body.schema-page, set via base.html's
+   body_class block): its field list is genuinely long, so it keeps
+   page-shell.css's sticky header (title + Back always visible while
+   scrolling) — the :not() below only cancels stickiness for every other
+   Setup page. */
+body:not(.schema-page) header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -18,6 +22,32 @@ header {
   background: none;
   box-shadow: none;
   transform: none;
+}
+
+/* nav.css's .geomerge-nav has a 1.5rem bottom margin — the normal breathing
+   room below the nav bar on every page. For a sticky header that margin is
+   also the distance it has to travel before locking (position: sticky
+   engages once the element's flow position reaches its `top` offset, and
+   margin counts toward that flow position) — invisible on every other
+   sticky-header page since their content never scrolls the actual window,
+   but visible here as a brief "drifts down, then catches" on a field list
+   long enough to really scroll. Moving the 1.5rem from the header's own
+   margin-top (none is set, so it was inheriting the gap purely from nav's
+   margin-bottom) to padding-top keeps the exact same visual gap at
+   scrollY=0 while removing the travel: padding is inside the sticky box,
+   so it doesn't affect when that box's edge reaches its stick point. */
+body.schema-page header {
+  margin-top: -1.5rem;
+  padding-top: 1.5rem;
+}
+
+/* schema.html's own header content: title on the left, Back on the right
+   (Save used to live here too — moved to every field row instead, see
+   schema.js, once per-row saves made a separate global one redundant). */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 /* 0.8rem overrides page-shell.css's shared 0.85rem default, same as
@@ -203,6 +233,34 @@ header {
   border: 1px solid var(--ctp-red);
 }
 
+/* Drag-to-reorder handle (see schema.js's dragHandle) — its own small grab
+   target rather than the whole row, so pressing into a text input/select
+   to edit or select text is never mistaken for a drag start. */
+.drag-handle {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 0.3rem;
+  font-size: 1.1rem;
+  color: var(--color-text-secondary);
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.field-row.dragging {
+  opacity: 0.4;
+}
+
+/* Shown on whatever row a drag is currently over, indicating "drop here" —
+   the dragged row will land immediately before this one. */
+.field-row.drag-over {
+  box-shadow: 0 -2px 0 var(--ctp-sapphire) inset;
+}
+
 /* Row shape: content on the left (stacked lines — identity/flags, then
    description, then enum values, then the usage badge), Remove pinned to
    the top-right of the whole row rather than wrapped in with everything
@@ -229,8 +287,35 @@ header {
   gap: 0.6rem;
 }
 
-.field-row .btn-danger {
+/* Save (this row's edits are part of the same whole-document save every
+   other save in this app does — see schema.js's save()) stacked above
+   Remove, both pinned to the row's right edge. The only Save trigger on
+   this page now (the old single header/bottom button was redundant once
+   every row had its own), so it gets the primary sapphire-pill treatment —
+   see its full styling further down, next to the disabled state. */
+.field-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
   flex-shrink: 0;
+}
+
+/* A field missing essential info — no description, or marked Categorical
+   with zero categories actually entered yet — gets a quiet inline flag
+   rather than a modal or blocking anything; only shown when something is
+   actually missing (nothing to say about a complete field). */
+.field-warning {
+  align-self: flex-start;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
+}
+
+.field-warning.hidden {
+  display: none;
 }
 
 .field-row input[type="text"],
@@ -284,22 +369,6 @@ header {
   font-weight: 600;
 }
 
-/* Categories (schema/ccnd.yaml's `categories` — code/label/description per
-   value) get real estate a plain enum-value pill can't hold, so this is
-   collapsed by default: a one-line label summary, expanding into the full
-   per-value editor only when you actually want to work on it. */
-.categories-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.82rem;
-  color: var(--color-text-secondary);
-}
-
-.categories-summary-list {
-  color: var(--color-text-secondary);
-}
-
 .link-btn {
   border: none;
   background: none;
@@ -321,6 +390,33 @@ header {
   margin-bottom: 0.4rem;
 }
 
+/* Column titles above each field's category list — placeholders alone read
+   fine on an empty row, but once every row is filled in there's nothing
+   left distinguishing the code/label/description columns at a glance. */
+.category-header {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* .category-code/-label/-description below are input-styling classes (one
+   sets a monospace font, the other two don't) — reused here only for their
+   widths, so the header's own font/size/weight/case/spacing has to be
+   re-asserted on each cell or "Code" renders in a different font than
+   "Label"/"Description" right next to it. */
+.category-header .category-code,
+.category-header .category-label,
+.category-header .category-description {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+
 .category-code {
   width: 160px;
   font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -334,6 +430,13 @@ header {
 .category-description {
   flex: 1;
   min-width: 160px;
+}
+
+/* Matches a category row's Remove (×) button width, so the three header
+   labels line up with their actual columns instead of drifting right. */
+.category-header-spacer {
+  width: 28px;
+  flex-shrink: 0;
 }
 
 .categories-controls {
@@ -375,19 +478,15 @@ button:hover {
   margin-top: 0.5rem;
 }
 
-.save-row {
-  margin-top: 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
 /* Setup's own tab-cyan accent (--ctp-sapphire, see nav.css) for the primary
    action — same pattern as column_mapping's Prepare-purple Save & next
    button: solid fill, text is the opposite-extreme neutral (see nav.css's
    button.found.confirmed comment for why that pairing holds in both
-   themes). */
-#save-btn {
+   themes). Disabled (no unsaved changes, a save already in flight, or a
+   blank field name — see schema.js's updateSaveButtonsState()) fades to
+   the same neutral gray every other disabled primary button in this app
+   uses. */
+.row-save-btn {
   padding: 0.45rem 1.1rem;
   font-size: 0.9rem;
   font-weight: 600;
@@ -397,13 +496,49 @@ button:hover {
   color: var(--color-nav-bg);
 }
 
-#save-btn:hover {
+.row-save-btn:hover {
   filter: brightness(0.92);
+}
+
+.row-save-btn:disabled {
+  background: var(--ctp-surface1);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+.row-save-btn:disabled:hover {
+  background: var(--ctp-surface1);
+  filter: none;
 }
 
 .error {
   color: var(--ctp-red);
   font-size: 0.85rem;
+}
+
+/* Replaces a plain window.confirm() — same modal chrome as everywhere else
+   in the app instead of an unstyled OS dialog, and scrollable since the
+   affected-sources list can get long. */
+.risky-save-panel {
+  width: 560px;
+}
+
+.risky-save-body {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.risky-save-body li {
+  margin-bottom: 0.4rem;
+}
+
+.risky-save-body ul {
+  margin-top: 0.2rem;
+  padding-left: 1.25rem;
+  color: var(--color-text-secondary);
 }
 
 /* --- Column matching rules (column_matching_rules.html) --- */
@@ -533,4 +668,53 @@ button:hover {
   border-radius: 4px;
   background: var(--color-input-bg);
   color: var(--color-text);
+}
+
+/* --- Classification matching rules (classification_matching_rules.html) ---
+   .target-tabs/.target-tab are the same shape as classification/review.html's
+   own tab bar, duplicated here (different tool, own style.css, same
+   convention as every other tool-specific bit) — sapphire instead of mauve
+   since this page lives under Setup's own tab accent, not Prepare's. */
+.target-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.target-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.target-tab:hover {
+  color: var(--color-text);
+  background: var(--ctp-surface0);
+}
+
+.target-tab.active {
+  color: var(--ctp-sapphire);
+  border-color: var(--ctp-sapphire);
+  background: color-mix(in srgb, var(--ctp-sapphire) 12%, var(--color-panel-bg));
+  font-weight: 600;
+}
+
+.target-tab-label {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.rules-source-columns {
+  margin-bottom: 0.75rem;
+}
+
+.target-na-note {
+  padding: 0.75rem 0;
 }

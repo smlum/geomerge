@@ -2,6 +2,8 @@
 
 {% block title %}Target schema{% endblock %}
 
+{% block body_class %} class="schema-page"{% endblock %}
+
 {% block extra_head %}
   <link rel="stylesheet" href="/modal.css" />
   <link rel="stylesheet" href="style.css" />
@@ -12,7 +14,10 @@
   <div class="title-block">
     <h1 id="title">Target schema</h1>
   </div>
-  <a href="/setup/" class="back-link">&larr; Back</a>
+  <div class="header-actions">
+    <span id="save-status" class="meta"></span>
+    <a href="/setup/" class="back-link">&larr; Back</a>
+  </div>
 {% endblock %}
 
 {% block content %}
@@ -24,20 +29,34 @@
   <div id="fields-body"></div>
 
   <button id="add-field-btn" type="button">+ Add field</button>
-
-  <div class="save-row">
-    <button id="save-btn">Save</button>
-    <span id="save-status" class="meta"></span>
-  </div>
 {% endblock %}
 
 {% block footer %}
-  <button type="button" id="footer-file-link" class="footer-file-link meta">editing: schema/ccnd.yaml</button>
+  <span class="footer-file-group">
+    <span class="meta">editing:</span>
+    <button type="button" id="footer-file-link" class="footer-file-link meta">schema/ccnd.yaml</button>
+  </span>
   <span class="meta">&middot;</span>
   <span id="field-count" class="meta"></span>
 {% endblock %}
 
 {% block modals %}
+  <div id="risky-save-modal" class="modal-overlay hidden">
+    <div class="modal-panel risky-save-panel">
+      <div class="modal-header">
+        <h2>Confirm risky changes</h2>
+        <button id="risky-save-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <p class="meta">Saving will remove or rename fields/values still referenced by real sources or config:</p>
+      <ul id="risky-save-body" class="risky-save-body"></ul>
+      <p class="meta">Those files will NOT be updated automatically.</p>
+      <div class="modal-actions">
+        <button id="risky-save-cancel-btn" type="button">Cancel</button>
+        <button id="risky-save-confirm-btn" type="button" class="btn-danger">Save anyway</button>
+      </div>
+    </div>
+  </div>
+
   <div id="file-preview-modal" class="modal-overlay hidden">
     <div class="modal-panel">
       <div class="modal-header">

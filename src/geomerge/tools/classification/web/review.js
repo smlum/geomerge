@@ -5,6 +5,7 @@ let appConfig = { mock: true, maps_api_key: null, street_view_enabled: false, n_
 const sampleCache = new Map(); // key -> { points: [...], spare: [...] }
 let modalEl = null;
 let activeTarget = null;
+let allTargetNames = [];
 
 function cacheKey(target, values) {
   return `${target}::${JSON.stringify(values)}`;
@@ -164,6 +165,11 @@ async function openStreetView(target, group) {
 
 // --- Group rows ---------------------------------------------------------
 
+// Returns {tr, ref} — ref is what saveCurrentTarget() reads back at save
+// time ({group, field, notIncludedCheckbox, initialValue, initialMethod}),
+// collected into targetRowRefs[target] by renderTargetSection below. No
+// per-row save button/status text any more (see saveCurrentTarget) — a row
+// just holds its live field state until the bottom Save button reads it.
 function renderGroupRow(target, group, columns, options, streetViewEnabled) {
   const tr = document.createElement("tr");
   const notIncludedValue = appConfig.not_included_value;
@@ -210,13 +216,6 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
   field.value = initialValue;
   field.disabled = isNotIncluded;
   fieldWrap.appendChild(field);
-
-  if (group.confidence === "exact" || group.confidence === "substring") {
-    const badge = document.createElement("span");
-    badge.className = `confidence confidence-${group.confidence}`;
-    badge.textContent = group.confidence;
-    fieldWrap.appendChild(badge);
-  }
   targetTd.appendChild(fieldWrap);
 
   const notIncludedLabel = document.createElement("label");
@@ -233,45 +232,6 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
 
   tr.appendChild(targetTd);
 
-  const statusTd = document.createElement("td");
-  const statusSpan = document.createElement("span");
-  const setSaved = (method) => {
-    statusSpan.className = "save-state save-state-saved";
-    statusSpan.textContent = `saved (${method})`;
-  };
-  const setUnsaved = () => {
-    statusSpan.className = "save-state save-state-unsaved";
-    statusSpan.textContent = "unsaved";
-  };
-  group.confidence === "saved" ? setSaved(initialMethod) : setUnsaved();
-  statusTd.appendChild(statusSpan);
-  tr.appendChild(statusTd);
-
-  const saveTd = document.createElement("td");
-  const saveBtn = document.createElement("button");
-  saveBtn.textContent = "Save";
-  saveBtn.addEventListener("click", async () => {
-    const value = notIncludedCheckbox.checked ? notIncludedValue : field.value.trim();
-    if (!value) return;
-    const method = !notIncludedCheckbox.checked && value === initialValue && initialMethod === "rule" ? "rule" : "manual";
-    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target, values: group.values, target_value: value, method }),
-    });
-    if (res.ok) {
-      setSaved(method);
-      saveBtn.textContent = "Saved ✓";
-      setTimeout(() => (saveBtn.textContent = "Save"), 900);
-      group.confidence = "saved";
-      updateTabStatus(target);
-    } else {
-      setUnsaved();
-    }
-  });
-  saveTd.appendChild(saveBtn);
-  tr.appendChild(saveTd);
-
   if (streetViewEnabled) {
     const svTd = document.createElement("td");
     const svBtn = document.createElement("button");
@@ -282,12 +242,13 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
     tr.appendChild(svTd);
   }
 
-  return tr;
+  return { tr, ref: { group, field, notIncludedCheckbox, initialValue, initialMethod } };
 }
 
 // --- Target sections (one per tab) --------------------------------------
 
 const targetDataByName = {}; // target -> targetData, kept for tab status recompute after a save
+const targetRowRefs = {}; // target -> [{group, field, notIncludedCheckbox, initialValue, initialMethod}], read by saveCurrentTarget()
 
 // not_applicable: no source columns configured/present, or no value combos
 // at all. not_started: nothing saved yet. complete: every combo has a saved
@@ -334,7 +295,7 @@ function renderTargetSection(target, targetData) {
     col.style.width = "200px";
     colgroup.appendChild(col);
   }
-  for (const width of ["70px", "260px", "130px", "90px"]) {
+  for (const width of ["70px", "260px"]) {
     const col = document.createElement("col");
     col.style.width = width;
     colgroup.appendChild(col);
@@ -353,7 +314,7 @@ function renderTargetSection(target, targetData) {
     th.textContent = col;
     headRow.appendChild(th);
   }
-  for (const label of ["Count", "Target", "Status", ""]) {
+  for (const label of ["Count", "Target"]) {
     const th = document.createElement("th");
     th.textContent = label;
     headRow.appendChild(th);
@@ -367,9 +328,13 @@ function renderTargetSection(target, targetData) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
+  const refs = [];
   for (const group of targetData.groups) {
-    tbody.appendChild(renderGroupRow(target, group, columns, targetData.options, targetData.street_view));
+    const { tr, ref } = renderGroupRow(target, group, columns, targetData.options, targetData.street_view);
+    tbody.appendChild(tr);
+    refs.push(ref);
   }
+  targetRowRefs[target] = refs;
   table.appendChild(tbody);
 
   const wrap = document.createElement("div");
@@ -414,7 +379,28 @@ function setActiveTarget(target) {
   for (const section of document.querySelectorAll(".target-section")) {
     section.classList.toggle("hidden", section.dataset.target !== target);
   }
+  // Scopes the header's "Edit matching rules" link to whichever target is
+  // currently on screen, since each target has its own rules — see
+  // schema/classification_matching_rules.yaml and setup's editor.
+  const rulesLink = document.getElementById("rules-edit-link");
+  if (rulesLink) rulesLink.href = `/setup/classification_matching_rules.html?target=${encodeURIComponent(target)}`;
   updateStickyOffsets();
+}
+
+// Next tab (in tab order, wrapping around, excluding the current one) that
+// still needs work — what "Save & next" advances to before falling back to
+// findNextSource's whole-other-source search, so finishing one target on a
+// source lands you on the next one still to do (e.g. canbics_class ->
+// status) rather than bouncing straight to a different source.
+function findNextIncompleteTarget(current) {
+  const startIdx = allTargetNames.indexOf(current);
+  for (let i = 1; i <= allTargetNames.length; i++) {
+    const t = allTargetNames[(startIdx + i) % allTargetNames.length];
+    if (t === current) continue;
+    const status = computeTargetStatus(targetDataByName[t]);
+    if (status === "not_started" || status === "needs_review") return t;
+  }
+  return null;
 }
 
 // table-scroll gets a real max-height so it fills the viewport below the
@@ -449,6 +435,78 @@ async function loadClassifiedCount() {
   document.getElementById("classified-count").textContent = `${classifiedCount} / ${sources.length} sources classified`;
 }
 
+// Both buttons disabled for the whole operation, same reasoning as
+// column-mapping's map.js: the save + "find next" sequence below is a few
+// requests deep, and leaving either button live invites a double-submit
+// while the first is still in flight, with no visible sign anything is
+// happening.
+function setSaving(inProgress, message) {
+  document.getElementById("save-next-btn").disabled = inProgress;
+  document.getElementById("save-back-btn").disabled = inProgress;
+  document.getElementById("save-status").textContent = message || "";
+}
+
+// Bulk-saves every row of the currently active tab in one request — the
+// "single save button at bottom" model, replacing the old per-row auto-save.
+// A row left blank (no target value, not marked "Not included") is simply
+// omitted rather than sent empty, so it stays not_started/needs_review
+// rather than being saved as nothing. Returns true on success (with
+// targetDataByName/tab status already refreshed) or false on failure (with
+// the failure message already written to #save-status).
+async function saveCurrentTarget() {
+  const refs = targetRowRefs[activeTarget] || [];
+  const notIncludedValue = appConfig.not_included_value;
+  const entries = [];
+  for (const ref of refs) {
+    const value = ref.notIncludedCheckbox.checked ? notIncludedValue : ref.field.value.trim();
+    if (!value) continue;
+    const method =
+      !ref.notIncludedCheckbox.checked && value === ref.initialValue && ref.initialMethod === "rule" ? "rule" : "manual";
+    entries.push({ values: ref.group.values, target_value: value, method });
+  }
+
+  if (!entries.length) return true; // nothing changed on this tab — not an error, just nothing to send
+
+  try {
+    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: activeTarget, entries }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setSaving(false, data.error || "Failed to save");
+      return false;
+    }
+  } catch (e) {
+    setSaving(false, `Something went wrong: ${e}`);
+    return false;
+  }
+
+  for (const ref of refs) {
+    const value = ref.notIncludedCheckbox.checked ? notIncludedValue : ref.field.value.trim();
+    if (value) ref.group.confidence = "saved";
+  }
+  updateTabStatus(activeTarget);
+  return true;
+}
+
+function isIncomplete(s) {
+  return s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
+}
+
+async function loadClassifiedCount() {
+  const res = await fetch("api/sources");
+  const sources = await res.json();
+  const rolledUp = (s) => {
+    const values = Object.values(s.targets);
+    if (!values.length || values.every((v) => v === "not_applicable")) return "not_applicable";
+    return values.every((v) => v === "complete" || v === "not_applicable") ? "complete" : "not_complete";
+  };
+  const classifiedCount = sources.filter((s) => rolledUp(s) === "complete").length;
+  document.getElementById("classified-count").textContent = `${classifiedCount} / ${sources.length} sources classified`;
+}
+
 async function load() {
   document.getElementById("source-label").innerHTML =
     `<span class="field-label">Source ID:</span> <button type="button" class="field-value source-card-trigger">${escapeHtml(sourceId)}</button>`;
@@ -458,14 +516,28 @@ async function load() {
     `<span class="field-label">Reading:</span> <span class="field-value">data/preprocessing/${escapeHtml(sourceId)}/${escapeHtml(sourceId)}.parquet</span>`;
 
   const classificationMapPath = `sources/${sourceId}/classification_map.yaml`;
-  document.getElementById("footer-file-path").textContent = classificationMapPath;
+  const fileLink = document.getElementById("footer-file-link");
+  fileLink.textContent = classificationMapPath;
+  fileLink.onclick = () => openFilePreview(classificationMapPath, `api/classification/${encodeURIComponent(sourceId)}/raw`);
 
-  const [configRes, dataRes] = await Promise.all([
-    fetch("api/config"),
-    fetch(`api/classification/${encodeURIComponent(sourceId)}`),
-  ]);
-  appConfig = await configRes.json();
-  const data = await dataRes.json();
+  // Any failure here — network, non-JSON error body, anything — ends in a
+  // visible message rather than the page just silently never loading (same
+  // fix column-mapping's map.js already applies to its own load()).
+  let configRes, dataRes, appConfigData, data;
+  try {
+    [configRes, dataRes] = await Promise.all([
+      fetch("api/config"),
+      fetch(`api/classification/${encodeURIComponent(sourceId)}`),
+    ]);
+    appConfigData = await configRes.json();
+    data = await dataRes.json();
+  } catch (e) {
+    const err = document.getElementById("error");
+    err.textContent = `Failed to load: ${e}`;
+    err.classList.remove("hidden");
+    return;
+  }
+  appConfig = appConfigData;
 
   if (!dataRes.ok) {
     const err = document.getElementById("error");
@@ -474,38 +546,42 @@ async function load() {
     return;
   }
 
-  document.getElementById("subtitle").textContent = !appConfig.street_view_enabled
-    ? ""
-    : appConfig.mock
-      ? "Street View: mock mode — sample points shown as plain links, no API calls"
-      : "Street View: embedded (Maps Embed API)";
-
   const container = document.getElementById("targets");
   container.innerHTML = "";
-  const targetNames = Object.keys(data.targets);
-  for (const target of targetNames) {
+  allTargetNames = Object.keys(data.targets);
+  for (const target of allTargetNames) {
     targetDataByName[target] = data.targets[target];
     container.appendChild(renderTargetSection(target, data.targets[target]));
   }
 
-  renderTabs(targetNames);
+  renderTabs(allTargetNames);
 
   // Default to the first tab that still needs work, so opening a source
   // drops you where there's something to do rather than always canbics_class.
-  const firstIncomplete = targetNames.find((t) => {
+  const firstIncomplete = allTargetNames.find((t) => {
     const status = computeTargetStatus(targetDataByName[t]);
     return status === "not_started" || status === "needs_review";
   });
-  setActiveTarget(firstIncomplete || targetNames[0]);
+  setActiveTarget(firstIncomplete || allTargetNames[0]);
 
   loadClassifiedCount();
 }
 
-// Every row already auto-saves itself on its own "Save" click — there's
-// nothing pending to flush here, so this is just "go to the next source
-// that still needs work" rather than a save step (unlike column-mapping,
-// which batches a whole form and genuinely saves on this click).
+// Saves the active tab, then advances: to the next tab still needing work
+// on this source if there is one, otherwise to the next source (or home).
 document.getElementById("save-next-btn").addEventListener("click", async () => {
+  setSaving(true, "Saving…");
+  const ok = await saveCurrentTarget();
+  if (!ok) return;
+
+  const nextTarget = findNextIncompleteTarget(activeTarget);
+  if (nextTarget) {
+    setActiveTarget(nextTarget);
+    setSaving(false, "Saved ✓");
+    return;
+  }
+
+  setSaving(true, "Finding next source…");
   const nextSourceId = await findNextSource(sourceId, "api/sources", isIncomplete);
   if (nextSourceId) {
     location.href = `review.html?id=${encodeURIComponent(nextSourceId)}`;
@@ -513,6 +589,14 @@ document.getElementById("save-next-btn").addEventListener("click", async () => {
     goHome();
   }
 });
-document.getElementById("save-back-btn").addEventListener("click", goHome);
+
+// Saves the active tab first, then leaves — same "don't silently drop
+// unsaved edits on the way out" reasoning as Save & next above.
+document.getElementById("save-back-btn").addEventListener("click", async () => {
+  setSaving(true, "Saving…");
+  const ok = await saveCurrentTarget();
+  if (!ok) return;
+  goHome();
+});
 
 load();

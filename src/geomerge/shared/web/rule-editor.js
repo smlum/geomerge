@@ -116,8 +116,13 @@ function ruleEditorAddTerm() {
 
 // Returns the saved {exact, contains, excludes, excludes_contains} on
 // success, or null on failure (with the failure message already written
-// into #rule-save-status).
-async function ruleEditorSave(targetName) {
+// into #rule-save-status). Takes the full save URL rather than just a
+// target name — column mapping's rules key by target field name alone
+// (/setup/api/column-matching-rules/<target>), but classification's are one
+// level deeper, keyed by (target, value) (/setup/api/classification-
+// matching-rules/<target>/<value>) — passing the whole URL keeps this one
+// implementation reusable by both shapes instead of hardcoding either.
+async function ruleEditorSave(url) {
   const statusEl = document.getElementById("rule-save-status");
   statusEl.textContent = "Saving…";
 
@@ -127,7 +132,7 @@ async function ruleEditorSave(targetName) {
   const excludes = byType("excludes");
   const excludesContains = byType("excludes_contains");
 
-  const res = await fetch(`/setup/api/column-matching-rules/${encodeURIComponent(targetName)}`, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ exact, contains, excludes, excludes_contains: excludesContains }),
