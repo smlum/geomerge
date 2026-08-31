@@ -1,63 +1,9 @@
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 0;
-  padding: 1.5rem 2rem 4rem;
-  color: var(--color-text);
-  background: var(--color-page-bg);
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-/* Sticks right below the sticky nav bar above it, not at the very top —
-   same treatment as collection/home's header. */
-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 1rem;
-  position: sticky;
-  top: var(--nav-height, 50px);
-  z-index: 2;
-  background: var(--color-page-bg);
-  box-shadow: 0 1px 0 var(--color-page-bg);
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
-
-.toggle {
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* Departure Mono (see nav.css's @font-face, loaded on this page) — matches
-   the brand mark's pixel-mono look for this "what's on screen" status text,
-   instead of the body's plain sans-serif. */
-.meta {
-  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-}
-
-/* Sticks to the bottom of the viewport, same idea as the nav bar at the
-   top. Height is fixed (not content-driven): the progress text is empty
-   until it loads, and a content-driven height would grow once it pops in,
-   shifting table-scroll (whose height is sized around this same height)
-   right along with it. */
-.geomerge-footer {
-  display: flex;
-  align-items: center;
-  height: 3rem;
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin: 1.5rem -2rem -4rem;
-  padding: 0 2rem;
-  background: var(--color-footer-bg);
-}
+/* body/header/.toggle/.meta/.geomerge-footer/.status(+variants)/.refresh-btn/
+   .name all now live in /page-shell.css (shared with every other dashboard:
+   home/prep/pipeline/collection) — this file only keeps this dashboard's
+   own table shape, which deliberately isn't shared (see page-shell.css's
+   comment): a real height (not max-height) on .table-scroll, table-layout:
+   auto with sticky on the whole <thead> rather than per-<th>. */
 
 /* A fixed height, not max-height: needs to fill the remaining viewport even
    before any rows have loaded (an empty tbody would otherwise shrink it to
@@ -103,71 +49,6 @@ th {
   background: var(--ctp-surface0);
 }
 
-.name {
-  font-weight: 600;
-}
-
 td a {
   text-decoration: none;
-}
-
-.status {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.status-not_started,
-.status-not_applicable,
-.status-not_built {
-  background: var(--ctp-surface0);
-  color: var(--color-text-secondary);
-}
-
-.status-not_built {
-  font-style: italic;
-}
-
-.status-needs_review,
-.status-not_complete {
-  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-.status-stale {
-  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
-  color: var(--ctp-red);
-}
-
-.status-complete {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
-}
-
-.status.copyable {
-  cursor: pointer;
-}
-
-.status.copyable:hover {
-  filter: brightness(0.92);
-}
-
-.refresh-btn {
-  margin-left: 0.3rem;
-  padding: 0;
-  width: 1.1rem;
-  height: 1.1rem;
-  line-height: 1;
-  font-size: 0.85rem;
-  border: none;
-  background: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  vertical-align: middle;
-}
-
-.refresh-btn:hover {
-  color: var(--color-text);
 }

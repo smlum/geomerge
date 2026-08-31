@@ -1,69 +1,7 @@
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 0;
-  padding: 1.5rem 2rem 4rem;
-  color: var(--color-text);
-  background: var(--color-page-bg);
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-/* Departure Mono (see nav.css's @font-face, loaded on this page) — matches
-   the brand mark's pixel-mono look for this "what's on screen" status text,
-   instead of the body's plain sans-serif. */
-.meta {
-  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-}
-
-/* Sticks right below the sticky nav bar above it, not at the very top —
-   same treatment as collection/style.css's header. */
-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 1rem;
-  position: sticky;
-  top: var(--nav-height, 50px);
-  z-index: 2;
-  background: var(--color-page-bg);
-  /* Papers over a sub-pixel seam some browsers show at a sticky element's
-     edge during scroll — same color as the header itself, so it's
-     invisible except for sealing that hairline gap. */
-  box-shadow: 0 1px 0 var(--color-page-bg);
-  /* Safari specifically fails to repaint a sticky element's exact boundary
-     pixel cleanly during scroll compositing (a known WebKit bug, not
-     present in Chrome) — forcing it onto its own GPU layer fixes it. */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
-
-.toggle {
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* Sticks to the bottom of the viewport, same idea as the nav bar at the
-   top. Height is fixed (not content-driven): the summary text is empty
-   until it loads, and a content-driven height would grow once it pops in,
-   shifting table-scroll (whose height is sized around this same height,
-   see below) right along with it. */
-.geomerge-footer {
-  display: flex;
-  align-items: center;
-  height: 3rem;
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin: 1.5rem -2rem -4rem;
-  padding: 0 2rem;
-  background: var(--color-footer-bg);
-}
+/* body/*{box-sizing}/header/.toggle/.meta/.geomerge-footer(base)/.status
+   (+variants)/.refresh-btn all now live in /page-shell.css (shared with
+   every other dashboard) — this file keeps home's own table shape and its
+   YAML-preview modal, both genuinely specific to this page. */
 
 /* A fixed height, not max-height: this needs to fill the remaining
    viewport even before any rows have loaded (an empty tbody would
@@ -116,36 +54,12 @@ th {
   background: var(--ctp-surface0);
 }
 
-.refresh-btn {
-  margin-left: 0.3rem;
-  padding: 0;
-  width: 1.1rem;
-  height: 1.1rem;
-  line-height: 1;
-  font-size: 0.85rem;
-  border: none;
-  background: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  text-transform: none;
-  letter-spacing: normal;
-  vertical-align: middle;
-}
-
-.refresh-btn:hover {
-  color: var(--color-text);
-}
-
 /* Divides the collection/ group (finding + landing raw data) from the
    tools/ group (human-reviewed decisions needed before the pipeline can
    run) from the pipeline/ group (mechanical, no review UI) — a deliberate
    distinction in how the project's built, not just a visual one. */
 .group-boundary {
   border-left: 2px solid var(--ctp-surface2);
-}
-
-.name {
-  font-weight: 600;
 }
 
 /* Opens the cross-page source-info card (see /source-card.js) — plain text
@@ -169,57 +83,6 @@ th {
 
 td a {
   text-decoration: none;
-}
-
-.status {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-/* Status colors are the accent mixed into the panel background rather than
-   a separate hardcoded pastel per status per theme (see nav.css's tab
-   colors for the same pattern and rationale) — one --ctp-green/-yellow/-red
-   value, already themed for Latte/Frappé in colors.css, gives a correct
-   tint+text pair in both themes instead of needing light- and dark-mode
-   pastels hand-tuned for every status. */
-.status-not_started,
-.status-not_applicable,
-.status-not_built {
-  background: var(--ctp-surface0);
-  color: var(--color-text-secondary);
-}
-
-.status-not_built {
-  font-style: italic;
-}
-
-.status-missing,
-.status-stale {
-  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
-  color: var(--ctp-red);
-}
-
-.status-partial,
-.status-needs_review,
-.status-not_complete {
-  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-.status-complete {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
-}
-
-.status.copyable {
-  cursor: pointer;
-}
-
-.status.copyable:hover {
-  filter: brightness(0.92);
 }
 
 /* A read-only preview of a source's actual YAML file (metadata.yaml,

@@ -1,133 +1,65 @@
-/* display: flex + min-height: 100vh here, plus .content-area's flex: 1
-   below, is what keeps the footer pinned to the true bottom of the viewport
-   regardless of row count — a short raw file's table (see .table-scroll's
-   own comment) no longer stretches to fill the page, but without this the
-   leftover space it used to fill would just be unclaimed, leaving the
-   footer floating above the real bottom instead of sitting at it. The
-   min-height floor is what lets a short page still measure a full viewport
-   for this to distribute; a tall page (table-scroll capped at its own
-   max-height and scrolling internally) still naturally totals to ~100vh, so
-   this doesn't change that case. */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 0;
-  padding: 1.5rem 2rem 4rem;
-  color: var(--color-text);
-  background: var(--color-page-bg);
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+/* Structural mechanics (body/header/content-area/footer),
+   .meta/.field-label/.field-value/.source-label, .back-link, select base
+   styling, .status pills, .save-row layout, button base + the primary
+   #save-next-btn pill all now live in /page-shell.css — this file keeps
+   what's genuinely specific to column mapping, including table/th/td and
+   .table-scroll's own sizing (see page-shell.css's comment on why those
+   two aren't shared with the dashboards' different table shape). 0.8rem
+   .meta below is this page's own pre-existing size, kept as an override of
+   page-shell.css's shared 0.85rem default rather than silently changed. */
+.meta {
+  font-size: 0.8rem;
 }
 
-/* Wraps everything between the sticky header and the footer. flex: 1 lets it
-   absorb whatever vertical space the (now shrink-to-fit) table-scroll below
-   doesn't use, so the footer still lands at the true bottom of a short page.
-   min-height: 0 overrides flexbox's default min-height: auto on this axis —
-   without it, a nested flex child refuses to shrink below its content size,
-   which would silently defeat table-scroll's own max-height/overflow. */
-.content-area {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+/* Rounded corners + shadow come from table.css's .table-scroll (the shared
+   "closed card" look every tool's table gets). max-height, not height:
+   this table's row count is just one raw file's column count — often well
+   short of a full page (e.g. Oshawa). A fixed height left a big empty gap
+   in the card below the last row; max-height caps it for a long raw file's
+   columns while letting a short one shrink to fit.
+
+   The two reserved terms below are what's rendered *below* table-scroll,
+   each measured directly rather than guessed: 3rem for .save-row (1rem
+   margin-top + its ~2rem row), 4.5rem for .geomerge-footer (1.5rem
+   margin-top + its 3rem height). Both need reserving — this table-scroll
+   sits in normal flow, but .geomerge-footer is position: sticky and pins to
+   the viewport bottom regardless, so if the page overflows one viewport at
+   all, the footer stops following normal flow and renders on top of
+   save-row instead of below it, hiding Save & next/Flag & next rather than
+   just leaving a tight gap. */
+.table-scroll {
+  overflow: auto;
+  max-height: calc(100vh - var(--header-height, 100px) - 3rem - 4.5rem);
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
+table {
+  min-width: 900px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  background: var(--color-panel-bg);
 }
 
-.hidden {
-  display: none;
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  font-size: 0.9rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-/* Sticks right below the sticky nav bar above it — same treatment as every
-   other tool's own table page (home/collection/prep/pipeline/validate),
-   see map.js's updateStickyOffsets() for the --nav-height/--header-height
-   custom properties this and .table-scroll below rely on. */
-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+th {
+  background: var(--ctp-surface0);
   position: sticky;
-  top: var(--nav-height, 50px);
-  z-index: 2;
-  background: var(--color-page-bg);
-  box-shadow: 0 1px 0 var(--color-page-bg);
+  top: 0;
+  z-index: 1;
+  /* Safari specifically fails to repaint a sticky element's exact boundary
+     pixel cleanly during scroll compositing (a known WebKit bug, not
+     present in Chrome) — forcing it onto its own GPU layer fixes it. */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
-}
-
-h1 {
-  font-size: 1.2rem;
-  margin: 0;
-}
-
-.title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-/* Same Prepare-purple accent as source-label — matches setup/style.css's own
-   .back-link (there, sapphire, for its own tab's identity). Plain navigation
-   back to home, not a save action: Save & next/Flag & next are the only
-   ways to persist a change, same as before. */
-.back-link {
-  font-size: 0.85rem;
-  color: var(--ctp-mauve);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.back-link:hover {
-  text-decoration: underline;
-}
-
-.meta {
-  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-}
-
-/* Header used to be three lines of identical gray .meta text with nothing to
-   tell them apart at a glance. Splitting each into a muted label + a
-   brighter value gives the block a real hierarchy: source-label (this page's
-   identity) is bumped up further with the Prepare-tab purple accent, since
-   it matters most; file-paths is a step down; rules-line (already the
-   smallest concern) is left as plain .meta. */
-.field-label {
-  color: var(--color-text-secondary);
-}
-
-.field-value {
-  color: var(--color-text);
-}
-
-.source-label .field-value {
-  font-weight: 600;
-  color: var(--ctp-mauve);
-}
-
-/* Opens the cross-page source-info card (see /source-card.js) — a real
-   <button> now, not a <span>, so it needs its own reset (buttons don't
-   inherit ambient font/border/background the way inline elements do); font:
-   inherit is safe here since #source-label really is this button's DOM
-   parent (not just a co-applied sibling class the way footer-file-link's
-   comment above warns about). */
-.source-label .source-card-trigger {
-  border: none;
-  background: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.source-label .source-card-trigger:hover {
-  text-decoration: underline;
 }
 
 /* Shown when the currently open source was saved via "Flag & next" (see
@@ -145,16 +77,6 @@ h1 {
 
 .flag-badge.hidden {
   display: none;
-}
-
-/* "editing:" is plain, non-clickable .meta text; only the path itself
-   (#footer-file-link) opens the read-only raw-file preview (see
-   file-preview.js) — a tighter gap than the footer's own 1.5rem between
-   stats, since these two read as one phrase, not two separate items. */
-.footer-file-group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
 }
 
 /* Deliberately doesn't touch font-family/font-size/color — this is always
@@ -205,133 +127,15 @@ h1 {
   word-break: break-all;
 }
 
-/* Rounded corners + shadow now come from table.css's .table-scroll (the
-   shared "closed card" look every tool's table gets) instead of a local
-   shadow directly on <table> — one shadow, not a doubled-up one. */
-/* max-height, not height: unlike the dashboards (home/prep/pipeline/
-   validate), where a fixed height avoids layout jump against a known,
-   usually-long source list, this table's row count is just one raw file's
-   column count — often well short of a full page (e.g. Oshawa). A fixed
-   height left a big empty gap in the card below the last row; max-height
-   caps it for a long raw file's columns while letting a short one shrink to
-   fit, with the sticky header/scroll behavior identical either way.
-
-   The two reserved terms below are what's rendered *below* table-scroll,
-   each measured directly rather than guessed: 3rem for .save-row (1rem
-   margin-top + its ~2rem row), 4.5rem for .geomerge-footer (1.5rem
-   margin-top + its 3rem height). Both need reserving — this table-scroll
-   sits in normal flow, but .geomerge-footer is position: sticky and pins to
-   the viewport bottom regardless, so if the page overflows one viewport at
-   all, the footer stops following normal flow and renders on top of
-   save-row instead of below it, hiding Save & next/Flag & next rather than
-   just leaving a tight gap. This used to under-reserve (just "3rem -
-   0.75rem", sized for save-row alone) — same bug fixed in classification's
-   review page, which copied this formula. */
-.table-scroll {
-  overflow: auto;
-  max-height: calc(100vh - var(--header-height, 100px) - 3rem - 4.5rem);
-}
-
-table {
-  width: 100%;
-  min-width: 900px;
-  table-layout: fixed;
-  border-collapse: collapse;
-  background: var(--color-panel-bg);
-}
-
-th, td {
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--color-border);
-  vertical-align: middle;
-  font-size: 0.9rem;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-th {
-  background: var(--ctp-surface0);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  /* Safari specifically fails to repaint a sticky element's exact boundary
-     pixel cleanly during scroll compositing (a known WebKit bug, not
-     present in Chrome) — forcing it onto its own GPU layer fixes it. */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
-
-.name {
-  font-weight: 600;
-}
-
-select {
-  max-width: 100%;
-  font-size: 0.85rem;
-  padding: 0.3rem 0.4rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-input-bg);
-  color: var(--color-text);
-}
-
-.flag {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.flag-yes {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
-}
-
-.flag-no {
-  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
-  color: var(--ctp-red);
-}
-
-.status {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.status-not_started {
-  background: var(--ctp-surface0);
-  color: var(--color-text-secondary);
-}
-
-.status-needs_review {
-  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-.status-complete {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
-}
-
-.map-link {
-  font-size: 0.85rem;
-  color: var(--ctp-blue);
-}
-
 tr.collision td {
   background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
 }
 
 /* Sits to the right of the save/flag buttons, in the same row (see
-   .save-row below) rather than stacked above it — one row instead of two
-   keeps the space below the table to a minimum, which matters now that
-   .table-scroll's max-height has to reserve room for whatever renders below
-   it (see that rule's own comment). */
+   page-shell.css's .save-row) rather than stacked above it — one row
+   instead of two keeps the space below the table to a minimum, which
+   matters now that .table-scroll's max-height has to reserve room for
+   whatever renders below it (see that rule's own comment). */
 .missing-targets {
   padding: 0.4rem 0.75rem;
   background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
@@ -345,68 +149,12 @@ tr.collision td {
   display: none;
 }
 
-/* space-between puts the buttons on the left and missing-targets (when
-   shown) on the right — with missing-targets hidden, the buttons just sit
-   at the start, same as before. flex-wrap so a long missing-targets list
-   drops to its own line on a narrow window rather than overflowing. */
-.save-row {
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.save-row-buttons {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-button {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.85rem;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  background: var(--color-panel-bg);
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-/* Same pill language + Prepare-tab purple accent as the Edit button on
-   home's YAML preview modal (see home/web/style.css's .edit-btn-purple) —
-   Save & next is the primary (and, since Save & back to home was removed,
-   only) way to persist a change. */
-#save-next-btn {
-  padding: 0.45rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border-radius: 6px;
-  border: none;
-  background: var(--ctp-mauve);
-  color: var(--color-nav-bg);
-}
-
-#save-next-btn:hover {
-  filter: brightness(0.92);
-}
-
-#save-next-btn:disabled {
-  background: var(--ctp-surface1);
-  border-color: var(--ctp-surface1);
-  color: var(--color-text-secondary);
-  cursor: not-allowed;
-}
-
-#save-next-btn:disabled:hover {
-  background: var(--ctp-surface1);
-}
-
 /* Amber, not purple — a deliberate "set this aside" action, distinct from
    Save & next. Never disabled by recomputeCollisions() the way save-next is,
-   since flagging is exactly how you get
-   past a source you don't want to resolve collisions on right now. */
+   since flagging is exactly how you get past a source you don't want to
+   resolve collisions on right now. Column-mapping-only — no other tool has
+   a per-source flag concept — so this stays here rather than in
+   page-shell.css alongside #save-next-btn. */
 #flag-next-btn {
   padding: 0.45rem 1.1rem;
   font-size: 0.9rem;
@@ -430,33 +178,6 @@ button {
 
 #flag-next-btn:disabled:hover {
   background: var(--ctp-surface1);
-}
-
-button:hover {
-  background: var(--ctp-surface0);
-}
-
-.error {
-  color: var(--ctp-red);
-  font-size: 0.85rem;
-}
-
-/* Same footer bar + sticky treatment as every other tool's table page now
-   that .table-scroll above has a real JS-measured calc(100vh - ...) height
-   (see map.js's updateStickyOffsets()) — the page's whole layout fills
-   exactly one viewport regardless of row count, same as home/prep, so a
-   sticky footer lands at the true bottom rather than floating mid-page. */
-.geomerge-footer {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  height: 3rem;
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin: 1.5rem -2rem -4rem;
-  padding: 0 2rem;
-  background: var(--color-footer-bg);
 }
 
 .rules-line {

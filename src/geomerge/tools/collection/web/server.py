@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
-from flask import Blueprint, jsonify, request, send_from_directory
+from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config, stage_output_dir
 
@@ -65,7 +65,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
     schema_yaml = repo_root / config["sources_schema"]
     raw_dir = repo_root / config["raw_dir"]
 
-    bp = Blueprint("collection", __name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    bp = Blueprint(
+        "collection", __name__,
+        static_folder=str(Path(__file__).parent), static_url_path="",
+        template_folder="templates",
+    )
 
     def load_checklist() -> pd.DataFrame:
         return pd.read_csv(checklist_csv, dtype=str).fillna("")
@@ -171,7 +175,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/")
     def index():
-        return send_from_directory(bp.static_folder, "index.html")
+        return render_template("collection/index.html", active_tab="collect")
 
     @bp.route("/api/meta")
     def api_meta():

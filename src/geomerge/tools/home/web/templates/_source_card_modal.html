@@ -1,0 +1,15 @@
+<!-- Cross-page source-info card (see /source-card.js) — clicking a source id
+     wherever one appears (home/prep's tables, column-mapping's and
+     classification's headers) opens metadata highlights + the full
+     per-stage status summary. Included (not duplicated) by any page that
+     passes include_source_card=True to render_template(); base.html wires
+     up the close handlers and loads source-card.css/js to match. -->
+<div id="source-card-modal" class="modal-overlay hidden">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 id="source-card-title"></h2>
+      <button id="source-card-close" class="modal-close" type="button">&times;</button>
+    </div>
+    <div id="source-card-body"></div>
+  </div>
+</div>

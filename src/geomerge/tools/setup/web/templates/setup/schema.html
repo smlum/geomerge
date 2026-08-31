@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Target schema{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="/modal.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/hljs-theme.css" />
+{% endblock %}
+
+{% block header_content %}
+  <div class="title-block">
+    <h1 id="title">Target schema</h1>
+  </div>
+  <a href="/setup/" class="back-link">&larr; Back</a>
+{% endblock %}
+
+{% block content %}
+  <div class="danger-banner">
+    Edits to this file aren't updated in the rest of the project automatically
+    — best done at the start.
+  </div>
+
+  <div id="fields-body"></div>
+
+  <button id="add-field-btn" type="button">+ Add field</button>
+
+  <div class="save-row">
+    <button id="save-btn">Save</button>
+    <span id="save-status" class="meta"></span>
+  </div>
+{% endblock %}
+
+{% block footer %}
+  <button type="button" id="footer-file-link" class="footer-file-link meta">editing: schema/ccnd.yaml</button>
+  <span class="meta">&middot;</span>
+  <span id="field-count" class="meta"></span>
+{% endblock %}
+
+{% block modals %}
+  <div id="file-preview-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2 id="file-preview-title"></h2>
+          <div id="file-preview-path" class="meta"></div>
+        </div>
+        <button id="file-preview-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <pre id="file-preview-content" class="code-block hljs"></pre>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+  <script src="/file-preview.js"></script>
+  <script src="schema.js"></script>
+  <script>
+    document.getElementById("footer-file-link").addEventListener("click", () => {
+      openFilePreview("schema/ccnd.yaml", "api/schema/raw");
+    });
+    document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
+    document.getElementById("file-preview-modal").addEventListener("click", (e) => {
+      if (e.target.id === "file-preview-modal") closeFilePreview();
+    });
+  </script>
+{% endblock %}

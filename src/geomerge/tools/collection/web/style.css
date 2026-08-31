@@ -1,33 +1,11 @@
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 0;
-  padding: 1.5rem 2rem 4rem;
-  color: var(--color-text);
-  background: var(--color-page-bg);
-}
-
-header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  margin-bottom: 1rem;
-  position: sticky;
-  /* Sticks right below the sticky nav bar above it, not at the very top. */
-  top: var(--nav-height, 50px);
-  z-index: 2;
-  background: var(--color-page-bg);
-  /* Papers over a sub-pixel seam some browsers show at a sticky element's
-     edge during scroll (the header's real height is fractional, e.g.
-     53.39px, but gets measured/rounded to a whole pixel elsewhere) — same
-     color as the header itself, so it's invisible except for sealing that
-     hairline gap. */
-  box-shadow: 0 1px 0 var(--color-page-bg);
-  /* Safari specifically fails to repaint a sticky element's exact boundary
-     pixel cleanly during scroll compositing (a known WebKit bug, not
-     present in Chrome) — forcing it onto its own GPU layer fixes it. */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
+/* body/*{box-sizing}/header/.toggle/.geomerge-footer(base)/.hidden all now
+   live in /page-shell.css (shared with every other dashboard) — this file
+   keeps collection's own table shape (border-collapse: separate, not
+   collapse; per-th sticky, not thead — yet another table shape distinct
+   from both the review pages' and the other dashboards', see
+   page-shell.css's comment on why table mechanics aren't shared), plus a
+   couple of small overrides below where this page's pre-existing look
+   genuinely differs from the shared default. */
 
 #progress {
   color: var(--color-text-secondary);
@@ -37,39 +15,6 @@ header {
 .found-count {
   color: var(--ctp-green);
   font-weight: 600;
-}
-
-.toggle {
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* Sticks to the bottom of the viewport, same idea as the nav bar at the
-   top. Everything that isn't the live filter control lives here: the
-   editing path, the progress stat (dynamic, so keeping it out of the
-   page's normal flow avoids a load-in layout shift), and Add provider —
-   already just as reachable as it was in the old sticky header, so moving
-   it down here costs nothing.
-
-   Height is fixed (not content-driven) on purpose: the stat text is empty
-   until it loads, and a content-driven height would grow once it pops in,
-   shifting table-scroll (whose max-height is sized around this same
-   height, see below) right along with it. Fixed means the footer — and
-   everything above it — is stable from first paint. */
-.geomerge-footer {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  height: 3rem;
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin: 1.5rem -2rem -4rem;
-  padding: 0 2rem;
-  background: var(--color-footer-bg);
 }
 
 .geomerge-footer #add-source-btn {
@@ -112,10 +57,6 @@ th, td {
   vertical-align: middle;
   font-size: 0.9rem;
   overflow: hidden;
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
 }
 
 th {
@@ -183,13 +124,12 @@ tr.done.pending-metadata a {
   background: none;
 }
 
-/* Departure Mono (see nav.css's @font-face, loaded on this page) — matches
-   the brand mark's pixel-mono look for this "what's on screen" status text,
-   instead of the body's plain sans-serif. */
+/* page-shell.css's shared .meta sets font-family/color already (and a
+   0.85rem size meant for header/footer text) — this page's own .meta lives
+   inside table cells instead, so it overrides size and adds the truncation
+   this context actually needs; font-family/color fall through unchanged. */
 .meta {
-  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.78rem;
-  color: var(--color-text-secondary);
   font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
@@ -344,28 +284,24 @@ button.not-found.confirmed:hover {
   display: none;
 }
 
+/* page-shell.css's shared .status sets the pill shape (display/padding/
+   border-radius/font-weight, at 0.78rem) already — this page's own status
+   pills sit inline in a table cell, so the only thing genuinely different
+   here is the trailing margin; -missing/-partial (collection.metadata's own
+   status vocabulary, distinct from the not_started/needs_review/... one
+   used everywhere else) don't exist in the shared file at all. */
 .status {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
   margin-right: 0.4rem;
 }
 
+/* Gray, not the shared page-shell.css's red — collection.metadata's own
+   "missing" means "haven't looked yet", a neutral checklist state, not
+   home dashboard's "something's actively wrong" red for the same class
+   name in a different context. .status-partial/-complete's colors happen
+   to already match the shared file's, so only this one needs overriding. */
 .status-missing {
   background: var(--ctp-surface0);
   color: var(--color-text-secondary);
-}
-
-.status-partial {
-  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-.status-complete {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
 }
 
 button.metadata-btn {
@@ -414,10 +350,6 @@ button.metadata-btn {
 #add-another-source-btn {
   display: block;
   margin-top: 0.75rem;
-}
-
-.hidden {
-  display: none;
 }
 
 .edit-form {

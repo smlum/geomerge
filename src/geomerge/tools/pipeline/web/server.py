@@ -16,7 +16,7 @@ own status.py.
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, send_from_directory
+from flask import Blueprint, jsonify, render_template
 
 from geomerge.helpers.config import load_config
 from geomerge.pipeline.status import processing_status
@@ -27,7 +27,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
     repo_root = config["repo_root"]
     sources_dir = repo_root / config["sources_dir"]
 
-    bp = Blueprint("pipeline_tab", __name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    bp = Blueprint(
+        "pipeline_tab", __name__,
+        static_folder=str(Path(__file__).parent), static_url_path="",
+        template_folder="templates",
+    )
 
     def source_ids() -> list:
         if not sources_dir.is_dir():
@@ -36,7 +40,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/")
     def index():
-        return send_from_directory(bp.static_folder, "index.html")
+        return render_template("pipeline/index.html", active_tab="process")
 
     @bp.route("/api/sources")
     def api_sources():

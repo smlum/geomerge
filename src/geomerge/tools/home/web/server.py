@@ -25,9 +25,10 @@ Then open http://localhost:8640
 from pathlib import Path
 
 import yaml
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, render_template
 
 from geomerge.helpers.config import load_config
+from geomerge.helpers.nav import NAV_TABS
 from geomerge.pipeline.status import preprocessing_status, processing_status
 from geomerge.tools.classification.status import source_status as classification_status
 from geomerge.tools.classification.web.server import create_blueprint as create_classification_blueprint
@@ -55,6 +56,13 @@ def create_app(config: dict = None) -> Flask:
     app.register_blueprint(create_validate_blueprint(config), url_prefix="/validate")
     app.register_blueprint(create_column_mapping_blueprint(config), url_prefix="/column-mapping")
     app.register_blueprint(create_classification_blueprint(config), url_prefix="/classification")
+
+    # Available in every template rendered anywhere in the app (base.html's
+    # nav loop, in every tool's own blueprint) without each tool having to
+    # pass it into its own render_template() call.
+    @app.context_processor
+    def inject_nav_tabs():
+        return {"nav_tabs": NAV_TABS}
 
     def source_ids() -> list:
         if not sources_dir.is_dir():
@@ -119,7 +127,7 @@ def create_app(config: dict = None) -> Flask:
 
     @app.route("/")
     def index():
-        return send_from_directory(app.static_folder, "index.html")
+        return render_template("index.html", active_tab="home", include_source_card=True)
 
     @app.route("/api/sources")
     def api_sources():

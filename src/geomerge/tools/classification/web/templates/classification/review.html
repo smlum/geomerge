@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Classify{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="style.css" />
+{% endblock %}
+
+{% block header_content %}
+  <div class="title-block">
+    <h1>Classification</h1>
+    <div id="source-label" class="meta source-label"></div>
+    <div id="file-paths" class="meta file-paths"></div>
+    <div id="subtitle" class="meta"></div>
+  </div>
+  <a href="/prep/" class="back-link">&larr; Back</a>
+{% endblock %}
+
+{% block content %}
+  <div id="error" class="error hidden"></div>
+
+  <div class="content-area">
+    <div id="target-tabs" class="target-tabs"></div>
+    <div id="targets"></div>
+
+    <div class="save-row">
+      <button id="save-next-btn">Next source &rarr;</button>
+      <button id="save-back-btn">&larr; Back to home</button>
+    </div>
+  </div>
+{% endblock %}
+
+{% block footer %}
+  <span class="footer-file-group">
+    <span class="meta">editing:</span>
+    <span id="footer-file-path" class="meta"></span>
+  </span>
+  <span class="meta">&middot;</span>
+  <span id="classified-count" class="meta"></span>
+{% endblock %}
+
+{% block scripts %}
+  <script src="review.js"></script>
+{% endblock %}

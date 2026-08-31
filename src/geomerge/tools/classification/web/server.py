@@ -26,7 +26,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 from dotenv import load_dotenv
-from flask import Blueprint, jsonify, redirect, request, send_from_directory
+from flask import Blueprint, jsonify, redirect, render_template, request
 
 from geomerge.helpers.config import load_config
 from geomerge.helpers.constants import NOT_INCLUDED
@@ -61,7 +61,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
     matching_rules_path = repo_root / tool_config["matching_rules"]
     street_view_config = tool_config.get("street_view", {})
 
-    bp = Blueprint("classification", __name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    bp = Blueprint(
+        "classification", __name__,
+        static_folder=str(Path(__file__).parent), static_url_path="",
+        template_folder="templates",
+    )
 
     def load_matching_rules() -> dict:
         return load_yaml(matching_rules_path)
@@ -125,7 +129,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/review.html")
     def review_page():
-        return send_from_directory(bp.static_folder, "review.html")
+        return render_template("classification/review.html", active_tab="prepare", include_source_card=True)
 
     # Used by review.js's "Next source" button to find the next one that
     # still needs work — not a list-of-sources page (that's home's job now).

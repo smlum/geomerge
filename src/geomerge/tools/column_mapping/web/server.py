@@ -17,7 +17,7 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
-from flask import Blueprint, jsonify, redirect, request, send_from_directory
+from flask import Blueprint, jsonify, redirect, render_template, request
 
 from geomerge.helpers.config import load_config
 from geomerge.helpers.matching import match_name
@@ -37,7 +37,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
     sample_count = tool_config.get("sample_count", 3)
     sample_max_len = tool_config.get("sample_max_len", 25)
 
-    bp = Blueprint("column_mapping", __name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    bp = Blueprint(
+        "column_mapping", __name__,
+        static_folder=str(Path(__file__).parent), static_url_path="",
+        template_folder="templates",
+    )
 
     def load_target_fields() -> list:
         schema = yaml.safe_load(target_schema_path.read_text())
@@ -61,7 +65,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/map.html")
     def map_page():
-        return send_from_directory(bp.static_folder, "map.html")
+        return render_template("column_mapping/map.html", active_tab="prepare", include_source_card=True)
 
     @bp.route("/api/sources")
     def api_sources():

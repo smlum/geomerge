@@ -1,121 +1,14 @@
-/* display: flex + min-height: 100vh here, plus .content-area's flex: 1
-   below, is what keeps the footer pinned to the true bottom of the viewport
-   regardless of which tab/table is active — same layout skeleton as
-   column-mapping's map.html/style.css, since this page now follows the
-   same nav + sticky header + full-height table + sticky footer shape. */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 0;
-  padding: 1.5rem 2rem 4rem;
-  color: var(--color-text);
-  background: var(--color-page-bg);
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-/* Wraps everything between the sticky header and the footer: the tab bar,
-   the (one visible at a time) target table, and the save row. flex: 1 lets
-   it absorb whatever vertical space the table doesn't use so the footer
-   still lands at the true bottom of a short page; min-height: 0 overrides
-   flexbox's default min-height: auto on this axis, which would otherwise
-   refuse to let table-scroll's own max-height/overflow take effect. */
-.content-area {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-.hidden {
-  display: none;
-}
-
-/* Sticks right below the sticky nav bar above it — same treatment as every
-   other tool's own table page, see review.js's updateStickyOffsets() for
-   the --nav-height/--header-height custom properties this and .table-scroll
-   below rely on. */
-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  position: sticky;
-  top: var(--nav-height, 50px);
-  z-index: 2;
-  background: var(--color-page-bg);
-  box-shadow: 0 1px 0 var(--color-page-bg);
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
-
-.title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-h1 {
-  font-size: 1.2rem;
-  margin: 0;
-}
-
+/* Structural mechanics (body/header/content-area/footer),
+   .meta/.field-label/.field-value/.source-label, .back-link, select base
+   styling, .status pills, button base + the primary #save-next-btn pill
+   all now live in /page-shell.css — this file keeps what's genuinely
+   specific to classification: the tabs, Street View modal, table/th/td and
+   .table-scroll's own sizing (see page-shell.css's comment on why those
+   two aren't shared with the dashboards' different table shape). 0.8rem
+   .meta below is this page's own pre-existing size, kept as an override of
+   page-shell.css's shared 0.85rem default rather than silently changed. */
 .meta {
-  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8rem;
-  color: var(--color-text-secondary);
-}
-
-/* Header's three lines get a real hierarchy instead of identical gray .meta
-   text — a muted label + a brighter value, same split as column-mapping's
-   own header. source-label (this page's identity) is bumped up further with
-   the Prepare-tab purple accent, since it matters most. */
-.field-label {
-  color: var(--color-text-secondary);
-}
-
-.field-value {
-  color: var(--color-text);
-}
-
-.source-label .field-value {
-  font-weight: 600;
-  color: var(--ctp-mauve);
-}
-
-/* Opens the cross-page source-info card (see /source-card.js) — a real
-   <button>, not a <span>, so it needs its own reset. */
-.source-label .source-card-trigger {
-  border: none;
-  background: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.source-label .source-card-trigger:hover {
-  text-decoration: underline;
-}
-
-/* Same Prepare-purple accent as source-label — matches column-mapping's own
-   .back-link. Plain navigation back to home; the only ways to persist a
-   change are each row's own Save button, same as before. */
-.back-link {
-  font-size: 0.85rem;
-  color: var(--ctp-mauve);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.back-link:hover {
-  text-decoration: underline;
 }
 
 /* --- Target tabs --------------------------------------------------------
@@ -179,8 +72,7 @@ h1 {
    the viewport bottom regardless, so if the page overflows one viewport at
    all, the footer stops following normal flow and renders on top of
    save-row instead of below it, hiding "Next source"/"Back to home" rather
-   than just leaving a tight gap. Under-reserving here (this used to be just
-   "3rem - 0.75rem", sized for save-row alone) is what caused that. */
+   than just leaving a tight gap. */
 .table-scroll {
   overflow: auto;
   max-height: calc(100vh - var(--header-height, 100px) - 3rem - 4.5rem);
@@ -217,11 +109,11 @@ th {
   -webkit-transform: translateZ(0);
 }
 
-.name {
-  font-weight: 600;
-}
-
-select, input[type="text"] {
+/* page-shell.css's shared select{} covers the dropdown target field; this
+   page also has a free-text fallback (no enum defined yet) needing the
+   same chrome, which the shared file doesn't declare since no other page
+   has one. */
+input[type="text"] {
   max-width: 100%;
   font-size: 0.85rem;
   padding: 0.3rem 0.4rem;
@@ -229,31 +121,6 @@ select, input[type="text"] {
   border-radius: 4px;
   background: var(--color-input-bg);
   color: var(--color-text);
-}
-
-.status {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.status-not_started,
-.status-not_applicable {
-  background: var(--ctp-surface0);
-  color: var(--color-text-secondary);
-}
-
-.status-needs_review {
-  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-.status-complete {
-  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
-  color: var(--ctp-green);
 }
 
 .confidence {
@@ -288,41 +155,12 @@ select, input[type="text"] {
   color: var(--color-text-secondary);
 }
 
-button {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.85rem;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  background: var(--color-panel-bg);
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-button:hover {
-  background: var(--ctp-surface0);
-}
-
+/* page-shell.css's shared .save-row adds justify-content: space-between
+   for column-mapping's "buttons left, status pill right" layout — this
+   page's two buttons (Next source, Back to home) belong together on the
+   left instead, same as before that shared rule existed. */
 .save-row {
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-/* Same pill language + Prepare-tab purple accent as column-mapping's own
-   #save-next-btn. */
-#save-next-btn {
-  padding: 0.45rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border-radius: 6px;
-  border: none;
-  background: var(--ctp-mauve);
-  color: var(--color-nav-bg);
-}
-
-#save-next-btn:hover {
-  filter: brightness(0.92);
+  justify-content: flex-start;
 }
 
 #save-back-btn {
@@ -446,41 +284,4 @@ button:hover {
   color: var(--color-text-secondary);
   cursor: pointer;
   white-space: nowrap;
-}
-
-.error {
-  color: var(--ctp-red);
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
-}
-
-.error.hidden {
-  display: none;
-}
-
-/* Same footer bar + sticky treatment as column-mapping's page now that
-   .table-scroll above fills the viewport below header+tabs (see review.js's
-   updateStickyOffsets()) — the page's whole layout fills exactly one
-   viewport regardless of row count, so a sticky footer lands at the true
-   bottom rather than floating mid-page. */
-.geomerge-footer {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  height: 3rem;
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin: 1.5rem -2rem -4rem;
-  padding: 0 2rem;
-  background: var(--color-footer-bg);
-}
-
-/* "editing:" is plain, non-clickable .meta text, same phrase-not-two-items
-   tight gap as column-mapping's footer — this page doesn't offer a
-   file-preview modal on the path (visual parity only, no new behavior). */
-.footer-file-group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
 }

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{% block title %}geomerge{% endblock %}</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+  <link rel="stylesheet" href="/colors.css" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/nav.css" />
+  <link rel="stylesheet" href="/table.css" />
+  <link rel="stylesheet" href="/modal.css" />
+  <link rel="stylesheet" href="/page-shell.css" />
+  {% if include_source_card %}<link rel="stylesheet" href="/source-card.css" />{% endif %}
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <nav class="geomerge-nav">
+    <a href="/" class="geomerge-brand">geomerge</a>
+    <div class="geomerge-tabs">
+      {% for tab in nav_tabs %}
+      <a href="{{ tab.href }}" class="geomerge-tab{{ ' active' if tab.id == active_tab }} tab-{{ tab.color }}">{{ tab.label }}</a>
+      {% endfor %}
+    </div>
+    <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+      <span class="theme-toggle-track">
+        <span class="theme-toggle-knob">
+          <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
+          <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
+        </span>
+      </span>
+    </button>
+  </nav>
+  <header>
+    {% block header_content %}{% endblock %}
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <footer class="geomerge-footer">
+    {% block footer %}{% endblock %}
+  </footer>
+
+  {% block modals %}{% endblock %}
+  {% if include_source_card %}{% include "_source_card_modal.html" %}{% endif %}
+
+  {% block scripts_pre %}{% endblock %}
+  <script src="/nav.js"></script>
+  {% if include_source_card %}<script src="/source-card.js"></script>{% endif %}
+  {% block scripts %}{% endblock %}
+  {% if include_source_card %}
+  <script>
+    document.getElementById("source-card-close").addEventListener("click", closeSourceCard);
+    document.getElementById("source-card-modal").addEventListener("click", (e) => {
+      if (e.target.id === "source-card-modal") closeSourceCard();
+    });
+  </script>
+  {% endif %}
+  {% block scripts_post %}{% endblock %}
+</body>
+</html>

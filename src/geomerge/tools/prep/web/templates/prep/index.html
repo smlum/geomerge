@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}prepare{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="style.css" />
+{% endblock %}
+
+{% block header_content %}
+  <label class="toggle">
+    Filter:
+    <select id="filter-mode">
+      <option value="all" selected>All</option>
+      <option value="complete">Complete</option>
+      <option value="incomplete">Incomplete</option>
+    </select>
+  </label>
+{% endblock %}
+
+{% block content %}
+  <div class="table-scroll">
+    <table id="rows">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Map</th>
+          <th>
+            Preprocess
+            <button id="refresh-btn" class="refresh-btn" title="Refresh status">&#8635;</button>
+          </th>
+          <th>Classify</th>
+        </tr>
+      </thead>
+      <tbody id="rows-body"></tbody>
+      <tfoot>
+        <tr><td colspan="4"></td></tr>
+      </tfoot>
+    </table>
+  </div>
+{% endblock %}
+
+{% block footer %}
+  <span id="progress" class="meta"></span>
+{% endblock %}
+
+{% block scripts %}
+  <script src="app.js"></script>
+{% endblock %}

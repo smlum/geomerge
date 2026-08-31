@@ -1,0 +1,348 @@
+/* Shared by every per-source review page (column-mapping's map.html,
+   classification's review.html, and any future tool built on
+   templates/base.html) — loaded via an absolute <link href="/page-shell.css">,
+   same reasoning as nav.css/table.css/modal.css: one copy instead of one
+   hand-retyped per tool. Owns the structural *mechanism* that makes the
+   sticky-header / internally-scrolling-table / sticky-footer layout work,
+   plus the handful of element styles (status pills, table mechanics, the
+   primary button) that are identical across every tool that has them.
+
+   What stays in each tool's own style.css: anything genuinely page-specific
+   — colgroup/column widths, one-off widgets (a Street View modal, the rules
+   editor), a secondary button unique to that tool (Flag & next, Back to
+   home), or a color that deliberately differs.
+
+   --tab-accent (set on body, default mauve for Prepare-tab tools) is what
+   .back-link/#save-next-btn key off — a future tool under a different top
+   nav tab (e.g. Setup's sapphire) overrides it with its own
+   `body { --tab-accent: ...; }` in its own style.css, loaded after this
+   file so the override wins on source order. */
+
+body {
+  --tab-accent: var(--ctp-mauve);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 1.5rem 2rem 4rem;
+  color: var(--color-text);
+  background: var(--color-page-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Wraps everything between the sticky header and the footer. flex: 1 lets
+   it absorb whatever vertical space the (shrink-to-fit) table-scroll below
+   doesn't use, so the footer still lands at the true bottom of a short
+   page; min-height: 0 overrides flexbox's default min-height: auto on this
+   axis, which would otherwise refuse to let table-scroll's own
+   max-height/overflow take effect. */
+.content-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Sticks right below the sticky nav bar above it — see each page's own
+   updateStickyOffsets() for the --nav-height/--header-height custom
+   properties this and .table-scroll below rely on. */
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  position: sticky;
+  top: var(--nav-height, 50px);
+  z-index: 2;
+  background: var(--color-page-bg);
+  box-shadow: 0 1px 0 var(--color-page-bg);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+h1 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+/* 0.85rem matches the dashboards (home/prep/pipeline/validate/collection);
+   the two per-source review pages (column-mapping, classification) override
+   to 0.8rem in their own style.css — a pre-existing, purely cosmetic
+   difference kept as-is rather than silently changed by this file's
+   introduction. */
+.meta {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* Header lines get a real hierarchy instead of identical gray .meta text —
+   a muted label + a brighter value. source-label (a page's identity) is
+   bumped up further with --tab-accent, since it matters most. */
+.field-label {
+  color: var(--color-text-secondary);
+}
+
+.field-value {
+  color: var(--color-text);
+}
+
+.source-label .field-value {
+  font-weight: 600;
+  color: var(--tab-accent);
+}
+
+/* Opens the cross-page source-info card (see /source-card.js) — a real
+   <button>, not a <span>, so it needs its own reset. */
+.source-label .source-card-trigger {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.source-label .source-card-trigger:hover {
+  text-decoration: underline;
+}
+
+.back-link {
+  font-size: 0.85rem;
+  color: var(--tab-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.name {
+  font-weight: 600;
+}
+
+/* table/th/td and .table-scroll's own sizing deliberately aren't shared
+   here, even though both page shapes look similar at a glance: the two
+   per-source review pages use table-layout: fixed with an explicit colgroup,
+   stick each <th> individually, and cap .table-scroll with max-height; the
+   dashboards use auto layout (content-sized columns, no colgroup), stick the
+   whole <thead> instead — a deliberate Safari-only compositing-bug
+   workaround (see e.g. pipeline/style.css) that per-th stickiness would
+   silently reintroduce — and give .table-scroll a real height, not
+   max-height (needs to fill the viewport even before any rows load). Each
+   shape stays in its own tool's style.css; only the truly
+   page-shape-independent bits (colors, .status pills, select chrome) live
+   here. */
+
+select {
+  max-width: 100%;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+.status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-not_started,
+.status-not_applicable,
+.status-not_built {
+  background: var(--ctp-surface0);
+  color: var(--color-text-secondary);
+}
+
+/* not_built (the validate stage placeholder) reads as "nothing here yet",
+   not "you have work to do" — same gray as not_started/not_applicable, but
+   italicized to mark it as the odd one out. */
+.status-not_built {
+  font-style: italic;
+}
+
+/* status-partial/-missing are collection.metadata's own status vocabulary
+   (distinct from the not_started/needs_review/... one everything else
+   uses) — grouped into the same yellow/red as their nearest equivalent
+   rather than given their own color, since home's dashboard shows both
+   vocabularies side by side (one column per stage) and they mean the same
+   thing at a glance: yellow = partly done, red = actively wrong/missing. */
+.status-needs_review,
+.status-not_complete,
+.status-partial {
+  background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
+  color: var(--ctp-yellow);
+}
+
+.status-stale,
+.status-missing {
+  background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
+  color: var(--ctp-red);
+}
+
+.status-complete {
+  background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
+  color: var(--ctp-green);
+}
+
+/* A copyable status pill (pipeline/processing's stale/not_built badges)
+   copies its fix-it CLI command to the clipboard on click instead of just
+   sitting there — see each dashboard's own app.js. */
+.status.copyable {
+  cursor: pointer;
+}
+
+.status.copyable:hover {
+  filter: brightness(0.92);
+}
+
+/* The filter dropdown sitting alone in a dashboard's <header> (home, prep,
+   pipeline, validate, collection) — table.css owns the <select> chrome
+   itself since every page with a .toggle also loads that file. */
+.toggle {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Sits next to a table header label (e.g. "Preprocess ↻") on dashboards
+   whose status is a real CLI command away from being fixed — click to copy
+   it, same idea as .status.copyable above. */
+.refresh-btn {
+  margin-left: 0.3rem;
+  padding: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  line-height: 1;
+  font-size: 0.85rem;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: middle;
+}
+
+.refresh-btn:hover {
+  color: var(--color-text);
+}
+
+.save-row {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.save-row-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+button {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--ctp-surface0);
+}
+
+/* The primary "commit and move on" action on every one of these pages —
+   Save & next (column mapping), Next source (classification) — same pill
+   language and --tab-accent color everywhere it appears. */
+#save-next-btn {
+  padding: 0.45rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: var(--tab-accent);
+  color: var(--color-nav-bg);
+}
+
+#save-next-btn:hover {
+  filter: brightness(0.92);
+}
+
+#save-next-btn:disabled {
+  background: var(--ctp-surface1);
+  border-color: var(--ctp-surface1);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+#save-next-btn:disabled:hover {
+  background: var(--ctp-surface1);
+}
+
+.error {
+  color: var(--ctp-red);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.error.hidden {
+  display: none;
+}
+
+/* Sticky footer bar. margin's negative left/right cancel body's 2rem
+   horizontal padding (flush to the page edges); negative bottom cancels
+   body's 4rem bottom padding (the footer occupies that reserved space
+   instead of sitting below it) — see .table-scroll's own comment above for
+   why that reserved space has to be accounted for on both sides. */
+.geomerge-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 3rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 1.5rem -2rem -4rem;
+  padding: 0 2rem;
+  background: var(--color-footer-bg);
+}
+
+/* "editing:" is plain, non-clickable .meta text — a tighter gap than the
+   footer's own 1.5rem between stats, since these two read as one phrase,
+   not two separate items. */
+.footer-file-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}

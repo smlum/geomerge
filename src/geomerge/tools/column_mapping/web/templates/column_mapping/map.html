@@ -1,53 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Column map</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
-  <link rel="stylesheet" href="/colors.css" />
-  <script src="/theme.js"></script>
-  <link rel="stylesheet" href="/nav.css" />
-  <link rel="stylesheet" href="/table.css" />
-  <link rel="stylesheet" href="/modal.css" />
-  <link rel="stylesheet" href="/source-card.css" />
+{% extends "base.html" %}
+
+{% block title %}Column map{% endblock %}
+
+{% block extra_head %}
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/hljs-theme.css" />
-</head>
-<body>
-  <nav class="geomerge-nav">
-    <a href="/" class="geomerge-brand">geomerge</a>
-    <div class="geomerge-tabs">
-      <a href="/" class="geomerge-tab tab-blue">Home</a>
-      <a href="/setup/" class="geomerge-tab tab-lavender">Setup</a>
-      <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
-      <a href="/prep/" class="geomerge-tab active tab-purple">Prepare</a>
-      <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
-      <a href="/validate/" class="geomerge-tab tab-pink">Validate</a>
-    </div>
-      <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
-        <span class="theme-toggle-track">
-          <span class="theme-toggle-knob">
-            <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
-            <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
-          </span>
-        </span>
-      </button>
-  </nav>
-  <header>
-    <div class="title-block">
-      <h1>Column mapping</h1>
-      <div id="source-label" class="meta source-label"></div>
-      <span id="flag-badge" class="flag-badge hidden">&#9873; Flagged — revisit later</span>
-      <div id="file-paths" class="meta file-paths"></div>
-      <div class="meta rules-line">
-        Applying rules from: <code>column_matching_rules.yaml</code> —
-        <button type="button" id="rules-edit-link" class="link-btn">Edit</button>
-      </div>
-    </div>
-    <a href="/prep/" class="back-link">&larr; Back</a>
-  </header>
+{% endblock %}
 
+{% block header_content %}
+  <div class="title-block">
+    <h1>Column mapping</h1>
+    <div id="source-label" class="meta source-label"></div>
+    <span id="flag-badge" class="flag-badge hidden">&#9873; Flagged — revisit later</span>
+    <div id="file-paths" class="meta file-paths"></div>
+    <div class="meta rules-line">
+      Applying rules from: <code>column_matching_rules.yaml</code> —
+      <button type="button" id="rules-edit-link" class="link-btn">Edit</button>
+    </div>
+  </div>
+  <a href="/prep/" class="back-link">&larr; Back</a>
+{% endblock %}
+
+{% block content %}
   <div class="content-area">
     <div class="table-scroll">
       <table id="rows">
@@ -81,17 +55,19 @@
       <div id="missing-targets" class="missing-targets hidden"></div>
     </div>
   </div>
+{% endblock %}
 
-  <footer class="geomerge-footer">
-    <span class="footer-file-group">
-      <span class="meta">editing:</span>
-      <button type="button" id="footer-file-link" class="footer-file-link meta"></button>
-    </span>
-    <span class="meta">&middot;</span>
-    <span id="mapped-count" class="meta"></span>
-    <span id="save-status" class="meta"></span>
-  </footer>
+{% block footer %}
+  <span class="footer-file-group">
+    <span class="meta">editing:</span>
+    <button type="button" id="footer-file-link" class="footer-file-link meta"></button>
+  </span>
+  <span class="meta">&middot;</span>
+  <span id="mapped-count" class="meta"></span>
+  <span id="save-status" class="meta"></span>
+{% endblock %}
 
+{% block modals %}
   <div id="rules-modal" class="modal-overlay hidden">
     <div class="modal-panel">
       <div class="modal-header">
@@ -145,25 +121,12 @@
       <pre id="file-preview-content" class="code-block hljs"></pre>
     </div>
   </div>
+{% endblock %}
 
-  <!-- Cross-page source-info card (see /source-card.js) — clicking the
-       Source ID value above opens metadata highlights + the full per-stage
-       status summary. -->
-  <div id="source-card-modal" class="modal-overlay hidden">
-    <div class="modal-panel">
-      <div class="modal-header">
-        <h2 id="source-card-title"></h2>
-        <button id="source-card-close" class="modal-close" type="button">&times;</button>
-      </div>
-      <div id="source-card-body"></div>
-    </div>
-  </div>
-
+{% block scripts %}
   <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
   <script src="/file-preview.js"></script>
-  <script src="/nav.js"></script>
   <script src="/rule-editor.js"></script>
-  <script src="/source-card.js"></script>
   <script src="map.js"></script>
   <script src="rules-modal.js"></script>
   <script>
@@ -171,10 +134,5 @@
     document.getElementById("file-preview-modal").addEventListener("click", (e) => {
       if (e.target.id === "file-preview-modal") closeFilePreview();
     });
-    document.getElementById("source-card-close").addEventListener("click", closeSourceCard);
-    document.getElementById("source-card-modal").addEventListener("click", (e) => {
-      if (e.target.id === "source-card-modal") closeSourceCard();
-    });
   </script>
-</body>
-</html>
+{% endblock %}

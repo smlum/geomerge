@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Setup{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="style.css" />
+{% endblock %}
+
+{% block header_content %}
+  <div class="title-block">
+    <h1>Setup</h1>
+    <div class="meta">Domain config, decided once before a source exists — not part of the per-source workflow.</div>
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="card-grid">
+    <a href="schema.html" class="setup-card">
+      <div class="setup-card-title">Target schema</div>
+      <div class="setup-card-desc">The harmonized fields every source's raw data maps onto (schema/ccnd.yaml).</div>
+    </a>
+    <a href="column_matching_rules.html" class="setup-card">
+      <div class="setup-card-title">Column matching rules</div>
+      <div class="setup-card-desc">First-pass suggestion rules for mapping raw columns onto target fields (schema/column_matching_rules.yaml).</div>
+    </a>
+    <div class="setup-card setup-card-disabled">
+      <div class="setup-card-title">Classification matching rules</div>
+      <div class="setup-card-desc">Coming soon — the per-value suggestion rules used during classification review.</div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block footer %}
+  <span class="meta">Project-level config — no per-source status to report here.</span>
+{% endblock %}

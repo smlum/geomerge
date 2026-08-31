@@ -24,7 +24,7 @@ project-level, not per-source, and has no status column of its own.
 from pathlib import Path
 
 import yaml
-from flask import Blueprint, jsonify, request, send_from_directory
+from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config
 from geomerge.tools.setup.usage import build_usage_index, enum_value_sources, usage_detail, usage_summary
@@ -51,7 +51,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
     target_schema_path = repo_root / config["target_schema"]
     column_matching_rules_path = repo_root / config["tools"]["column_mapping"]["matching_rules"]
 
-    bp = Blueprint("setup", __name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    bp = Blueprint(
+        "setup", __name__,
+        static_folder=str(Path(__file__).parent), static_url_path="",
+        template_folder="templates",
+    )
 
     def load_schema() -> dict:
         return yaml.safe_load(target_schema_path.read_text())
@@ -61,15 +65,15 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/")
     def index():
-        return send_from_directory(bp.static_folder, "index.html")
+        return render_template("setup/index.html", active_tab="setup")
 
     @bp.route("/schema.html")
     def schema_page():
-        return send_from_directory(bp.static_folder, "schema.html")
+        return render_template("setup/schema.html", active_tab="setup")
 
     @bp.route("/column_matching_rules.html")
     def column_matching_rules_page():
-        return send_from_directory(bp.static_folder, "column_matching_rules.html")
+        return render_template("setup/column_matching_rules.html", active_tab="setup")
 
     @bp.route("/api/schema/fields")
     def api_schema_get():
