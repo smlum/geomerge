@@ -1,54 +1,69 @@
-/* Departure Mono by Helena Zhang (SIL OFL 1.1, see home/web/assets/fonts/)
-   — same font-face as nav.css's brand mark, duplicated here since this page
-   doesn't load nav.css (no top nav — see the back-link in review.html), only
-   used for .meta below rather than body text generally. */
-@font-face {
-  font-family: "Departure Mono";
-  src: url("/assets/fonts/DepartureMono-Regular.woff2") format("woff2"),
-       url("/assets/fonts/DepartureMono-Regular.woff") format("woff");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
+/* display: flex + min-height: 100vh here, plus .content-area's flex: 1
+   below, is what keeps the footer pinned to the true bottom of the viewport
+   regardless of which tab/table is active — same layout skeleton as
+   column-mapping's map.html/style.css, since this page now follows the
+   same nav + sticky header + full-height table + sticky footer shape. */
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
   padding: 1.5rem 2rem 4rem;
   color: var(--color-text);
   background: var(--color-page-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Wraps everything between the sticky header and the footer: the tab bar,
+   the (one visible at a time) target table, and the save row. flex: 1 lets
+   it absorb whatever vertical space the table doesn't use so the footer
+   still lands at the true bottom of a short page; min-height: 0 overrides
+   flexbox's default min-height: auto on this axis, which would otherwise
+   refuse to let table-scroll's own max-height/overflow take effect. */
+.content-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
-.tool-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.15rem;
+.hidden {
+  display: none;
 }
 
+/* Sticks right below the sticky nav bar above it — same treatment as every
+   other tool's own table page, see review.js's updateStickyOffsets() for
+   the --nav-height/--header-height custom properties this and .table-scroll
+   below rely on. */
 header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+  position: sticky;
+  top: var(--nav-height, 50px);
+  z-index: 2;
+  background: var(--color-page-bg);
+  box-shadow: 0 1px 0 var(--color-page-bg);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
 }
 
 h1 {
   font-size: 1.2rem;
   margin: 0;
-}
-
-h2 {
-  font-size: 1rem;
-  margin: 0 0 0.5rem;
-  text-transform: none;
 }
 
 .meta {
@@ -57,38 +72,149 @@ h2 {
   color: var(--color-text-secondary);
 }
 
+/* Header's three lines get a real hierarchy instead of identical gray .meta
+   text — a muted label + a brighter value, same split as column-mapping's
+   own header. source-label (this page's identity) is bumped up further with
+   the Prepare-tab purple accent, since it matters most. */
+.field-label {
+  color: var(--color-text-secondary);
+}
+
+.field-value {
+  color: var(--color-text);
+}
+
+.source-label .field-value {
+  font-weight: 600;
+  color: var(--ctp-mauve);
+}
+
+/* Opens the cross-page source-info card (see /source-card.js) — a real
+   <button>, not a <span>, so it needs its own reset. */
+.source-label .source-card-trigger {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.source-label .source-card-trigger:hover {
+  text-decoration: underline;
+}
+
+/* Same Prepare-purple accent as source-label — matches column-mapping's own
+   .back-link. Plain navigation back to home; the only ways to persist a
+   change are each row's own Save button, same as before. */
 .back-link {
   font-size: 0.85rem;
-  color: var(--ctp-blue);
+  color: var(--ctp-mauve);
   text-decoration: none;
   white-space: nowrap;
 }
 
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* --- Target tabs --------------------------------------------------------
+   One tab per classification target (canbics_class, status, surface_type,
+   snow_removal), each carrying its own rolled-up status badge so all four
+   targets' progress is visible without switching between them. Sits above
+   the (one visible at a time) table, in the same purple-accent language as
+   the rest of this Prepare-tab page. */
+.target-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.target-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.target-tab:hover {
+  color: var(--color-text);
+  background: var(--ctp-surface0);
+}
+
+.target-tab.active {
+  color: var(--ctp-mauve);
+  border-color: var(--ctp-mauve);
+  background: color-mix(in srgb, var(--ctp-mauve) 12%, var(--color-panel-bg));
+  font-weight: 600;
+}
+
+.target-tab-label {
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.target-na-note {
+  padding: 0.75rem 0;
+}
+
+/* Rounded corners + shadow come from table.css's .table-scroll (the shared
+   "closed card" look every tool's table gets). max-height, not height:
+   unlike the dashboards, a target's row count is just its unique raw-value
+   combos — often well short of a full page (e.g. snow_removal usually has a
+   handful) — so a fixed height would leave a big empty gap; max-height caps
+   a long one (e.g. canbics_class) while letting a short one shrink to fit.
+
+   The two reserved terms below are what's rendered *below* table-scroll,
+   each measured directly rather than guessed: 3rem for .save-row (1rem
+   margin-top + its ~2rem button), 4.5rem for .geomerge-footer (1.5rem
+   margin-top + its 3rem height). Both need reserving — this table-scroll
+   sits in normal flow, but .geomerge-footer is position: sticky and pins to
+   the viewport bottom regardless, so if the page overflows one viewport at
+   all, the footer stops following normal flow and renders on top of
+   save-row instead of below it, hiding "Next source"/"Back to home" rather
+   than just leaving a tight gap. Under-reserving here (this used to be just
+   "3rem - 0.75rem", sized for save-row alone) is what caused that. */
 .table-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: calc(100vh - var(--header-height, 100px) - 3rem - 4.5rem);
 }
 
 table {
   width: 100%;
   min-width: 700px;
+  table-layout: fixed;
   border-collapse: collapse;
   background: var(--color-panel-bg);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 th, td {
   text-align: left;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--color-border);
-  vertical-align: top;
+  vertical-align: middle;
   font-size: 0.9rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 th {
   background: var(--ctp-surface0);
   position: sticky;
   top: 0;
-  white-space: nowrap;
+  z-index: 1;
+  /* Safari specifically fails to repaint a sticky element's exact boundary
+     pixel cleanly during scroll compositing (a known WebKit bug, not
+     present in Chrome) — forcing it onto its own GPU layer fixes it. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .name {
@@ -96,7 +222,7 @@ th {
 }
 
 select, input[type="text"] {
-  max-width: 220px;
+  max-width: 100%;
   font-size: 0.85rem;
   padding: 0.3rem 0.4rem;
   border: 1px solid var(--color-border);
@@ -111,6 +237,7 @@ select, input[type="text"] {
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-not_started,
@@ -127,11 +254,6 @@ select, input[type="text"] {
 .status-complete {
   background: color-mix(in srgb, var(--ctp-green) 20%, var(--color-panel-bg));
   color: var(--ctp-green);
-}
-
-.map-link {
-  font-size: 0.9rem;
-  color: var(--ctp-blue);
 }
 
 .confidence {
@@ -166,10 +288,6 @@ select, input[type="text"] {
   color: var(--color-text-secondary);
 }
 
-.target-section {
-  margin-bottom: 2.5rem;
-}
-
 button {
   padding: 0.3rem 0.6rem;
   font-size: 0.85rem;
@@ -185,18 +303,21 @@ button:hover {
 }
 
 .save-row {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
+/* Same pill language + Prepare-tab purple accent as column-mapping's own
+   #save-next-btn. */
 #save-next-btn {
   padding: 0.45rem 1.1rem;
   font-size: 0.9rem;
   font-weight: 600;
+  border-radius: 6px;
   border: none;
-  background: var(--ctp-blue);
+  background: var(--ctp-mauve);
   color: var(--color-nav-bg);
 }
 
@@ -208,13 +329,14 @@ button:hover {
   padding: 0.45rem 1.1rem;
   font-size: 0.9rem;
   font-weight: 600;
-  border: 1px solid var(--ctp-blue);
+  border-radius: 6px;
+  border: 1px solid var(--ctp-mauve);
   background: var(--color-panel-bg);
-  color: var(--ctp-blue);
+  color: var(--ctp-mauve);
 }
 
 #save-back-btn:hover {
-  background: color-mix(in srgb, var(--ctp-blue) 18%, var(--color-panel-bg));
+  background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
 }
 
 .sv-btn {
@@ -334,4 +456,31 @@ button:hover {
 
 .error.hidden {
   display: none;
+}
+
+/* Same footer bar + sticky treatment as column-mapping's page now that
+   .table-scroll above fills the viewport below header+tabs (see review.js's
+   updateStickyOffsets()) — the page's whole layout fills exactly one
+   viewport regardless of row count, so a sticky footer lands at the true
+   bottom rather than floating mid-page. */
+.geomerge-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 3rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 1.5rem -2rem -4rem;
+  padding: 0 2rem;
+  background: var(--color-footer-bg);
+}
+
+/* "editing:" is plain, non-clickable .meta text, same phrase-not-two-items
+   tight gap as column-mapping's footer — this page doesn't offer a
+   file-preview modal on the path (visual parity only, no new behavior). */
+.footer-file-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }

@@ -214,10 +214,22 @@ h1 {
    column count — often well short of a full page (e.g. Oshawa). A fixed
    height left a big empty gap in the card below the last row; max-height
    caps it for a long raw file's columns while letting a short one shrink to
-   fit, with the sticky header/scroll behavior identical either way. */
+   fit, with the sticky header/scroll behavior identical either way.
+
+   The two reserved terms below are what's rendered *below* table-scroll,
+   each measured directly rather than guessed: 3rem for .save-row (1rem
+   margin-top + its ~2rem row), 4.5rem for .geomerge-footer (1.5rem
+   margin-top + its 3rem height). Both need reserving — this table-scroll
+   sits in normal flow, but .geomerge-footer is position: sticky and pins to
+   the viewport bottom regardless, so if the page overflows one viewport at
+   all, the footer stops following normal flow and renders on top of
+   save-row instead of below it, hiding Save & next/Flag & next rather than
+   just leaving a tight gap. This used to under-reserve (just "3rem -
+   0.75rem", sized for save-row alone) — same bug fixed in classification's
+   review page, which copied this formula. */
 .table-scroll {
   overflow: auto;
-  max-height: calc(100vh - var(--header-height, 100px) - 3rem - 0.75rem);
+  max-height: calc(100vh - var(--header-height, 100px) - 3rem - 4.5rem);
 }
 
 table {
@@ -315,21 +327,38 @@ tr.collision td {
   background: color-mix(in srgb, var(--ctp-red) 20%, var(--color-panel-bg));
 }
 
+/* Sits to the right of the save/flag buttons, in the same row (see
+   .save-row below) rather than stacked above it — one row instead of two
+   keeps the space below the table to a minimum, which matters now that
+   .table-scroll's max-height has to reserve room for whatever renders below
+   it (see that rule's own comment). */
 .missing-targets {
-  margin-top: 1rem;
-  padding: 0.6rem 0.9rem;
+  padding: 0.4rem 0.75rem;
   background: color-mix(in srgb, var(--ctp-yellow) 20%, var(--color-panel-bg));
   color: var(--ctp-yellow);
   border-radius: 4px;
   font-size: 0.85rem;
+  text-align: right;
 }
 
 .missing-targets.hidden {
   display: none;
 }
 
+/* space-between puts the buttons on the left and missing-targets (when
+   shown) on the right — with missing-targets hidden, the buttons just sit
+   at the start, same as before. flex-wrap so a long missing-targets list
+   drops to its own line on a narrow window rather than overflowing. */
 .save-row {
   margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.save-row-buttons {
   display: flex;
   align-items: center;
   gap: 0.75rem;

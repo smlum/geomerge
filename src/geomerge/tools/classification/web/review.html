@@ -7,29 +7,84 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
   <link rel="stylesheet" href="/colors.css" />
   <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/nav.css" />
+  <link rel="stylesheet" href="/table.css" />
+  <link rel="stylesheet" href="/modal.css" />
+  <link rel="stylesheet" href="/source-card.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <nav class="geomerge-nav">
+    <a href="/" class="geomerge-brand">geomerge</a>
+    <div class="geomerge-tabs">
+      <a href="/" class="geomerge-tab tab-blue">Home</a>
+      <a href="/setup/" class="geomerge-tab tab-lavender">Setup</a>
+      <a href="/collection/" class="geomerge-tab tab-peach">Collect</a>
+      <a href="/prep/" class="geomerge-tab active tab-purple">Prepare</a>
+      <a href="/pipeline/" class="geomerge-tab tab-teal">Process</a>
+      <a href="/validate/" class="geomerge-tab tab-pink">Validate</a>
+    </div>
+      <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-knob">
+            <span class="theme-toggle-icon theme-toggle-sun">☀️</span>
+            <span class="theme-toggle-icon theme-toggle-moon">🌙</span>
+          </span>
+        </span>
+      </button>
+  </nav>
   <header>
     <div class="title-block">
-      <div class="tool-label">Classify</div>
-      <h1 id="title"></h1>
-      <div id="input-path" class="meta"></div>
-      <div id="output-path" class="meta"></div>
+      <h1>Classification</h1>
+      <div id="source-label" class="meta source-label"></div>
+      <div id="file-paths" class="meta file-paths"></div>
       <div id="subtitle" class="meta"></div>
     </div>
     <a href="/prep/" class="back-link">&larr; Back</a>
   </header>
 
   <div id="error" class="error hidden"></div>
-  <div id="targets"></div>
 
-  <div class="save-row">
-    <button id="save-next-btn">Next source &rarr;</button>
-    <button id="save-back-btn">&larr; Back to home</button>
+  <div class="content-area">
+    <div id="target-tabs" class="target-tabs"></div>
+    <div id="targets"></div>
+
+    <div class="save-row">
+      <button id="save-next-btn">Next source &rarr;</button>
+      <button id="save-back-btn">&larr; Back to home</button>
+    </div>
+  </div>
+
+  <footer class="geomerge-footer">
+    <span class="footer-file-group">
+      <span class="meta">editing:</span>
+      <span id="footer-file-path" class="meta"></span>
+    </span>
+    <span class="meta">&middot;</span>
+    <span id="classified-count" class="meta"></span>
+  </footer>
+
+  <!-- Cross-page source-info card (see /source-card.js) — clicking the
+       Source ID value above opens metadata highlights + the full per-stage
+       status summary. -->
+  <div id="source-card-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="source-card-title"></h2>
+        <button id="source-card-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="source-card-body"></div>
+    </div>
   </div>
 
   <script src="/nav.js"></script>
+  <script src="/source-card.js"></script>
   <script src="review.js"></script>
+  <script>
+    document.getElementById("source-card-close").addEventListener("click", closeSourceCard);
+    document.getElementById("source-card-modal").addEventListener("click", (e) => {
+      if (e.target.id === "source-card-modal") closeSourceCard();
+    });
+  </script>
 </body>
 </html>

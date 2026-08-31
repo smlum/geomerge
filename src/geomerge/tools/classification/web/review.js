@@ -4,6 +4,7 @@ const sourceId = params.get("id");
 let appConfig = { mock: true, maps_api_key: null, street_view_enabled: false, n_samples: 3, not_included_value: "not_included" };
 const sampleCache = new Map(); // key -> { points: [...], spare: [...] }
 let modalEl = null;
+let activeTarget = null;
 
 function cacheKey(target, values) {
   return `${target}::${JSON.stringify(values)}`;
@@ -262,6 +263,8 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
       setSaved(method);
       saveBtn.textContent = "Saved ✓";
       setTimeout(() => (saveBtn.textContent = "Save"), 900);
+      group.confidence = "saved";
+      updateTabStatus(target);
     } else {
       setUnsaved();
     }
@@ -282,26 +285,70 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
   return tr;
 }
 
+// --- Target sections (one per tab) --------------------------------------
+
+const targetDataByName = {}; // target -> targetData, kept for tab status recompute after a save
+
+// not_applicable: no source columns configured/present, or no value combos
+// at all. not_started: nothing saved yet. complete: every combo has a saved
+// mapping. needs_review: some but not all. Mirrors status.py's
+// target_status() exactly, but derived from the groups this page already
+// has in hand (each carries confidence: "saved" when it came off disk)
+// rather than a second request — status.py's version exists for /api/sources,
+// which needs it for every source at once, not just the one open here.
+function computeTargetStatus(targetData) {
+  if (!targetData.source_columns.length || !targetData.groups.length) return "not_applicable";
+  const covered = targetData.groups.filter((g) => g.confidence === "saved").length;
+  if (covered === 0) return "not_started";
+  return covered === targetData.groups.length ? "complete" : "needs_review";
+}
+
+function updateTabStatus(target) {
+  const status = computeTargetStatus(targetDataByName[target]);
+  const badge = document.querySelector(`.target-tab[data-target="${target}"] .status`);
+  if (badge) {
+    badge.className = `status status-${status}`;
+    badge.textContent = status.replace(/_/g, " ");
+  }
+}
+
 function renderTargetSection(target, targetData) {
   const section = document.createElement("section");
-  section.className = "target-section";
-
-  const heading = document.createElement("h2");
-  heading.textContent = target;
-  section.appendChild(heading);
+  section.className = "target-section hidden";
+  section.dataset.target = target;
 
   if (!targetData.source_columns.length) {
     const note = document.createElement("div");
-    note.className = "meta";
+    note.className = "meta target-na-note";
     note.textContent = "Not applicable — none of this target's configured source columns exist for this source.";
     section.appendChild(note);
     return section;
   }
 
+  const columns = targetData.source_columns;
   const table = document.createElement("table");
+
+  const colgroup = document.createElement("colgroup");
+  for (const _ of columns) {
+    const col = document.createElement("col");
+    col.style.width = "200px";
+    colgroup.appendChild(col);
+  }
+  for (const width of ["70px", "260px", "130px", "90px"]) {
+    const col = document.createElement("col");
+    col.style.width = width;
+    colgroup.appendChild(col);
+  }
+  if (targetData.street_view) {
+    const col = document.createElement("col");
+    col.style.width = "110px";
+    colgroup.appendChild(col);
+  }
+  table.appendChild(colgroup);
+
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const col of targetData.source_columns) {
+  for (const col of columns) {
     const th = document.createElement("th");
     th.textContent = col;
     headRow.appendChild(th);
@@ -321,7 +368,7 @@ function renderTargetSection(target, targetData) {
 
   const tbody = document.createElement("tbody");
   for (const group of targetData.groups) {
-    tbody.appendChild(renderGroupRow(target, group, targetData.source_columns, targetData.options, targetData.street_view));
+    tbody.appendChild(renderGroupRow(target, group, columns, targetData.options, targetData.street_view));
   }
   table.appendChild(tbody);
 
@@ -332,14 +379,86 @@ function renderTargetSection(target, targetData) {
   return section;
 }
 
+// --- Tabs -----------------------------------------------------------------
+
+function renderTabs(targetNames) {
+  const bar = document.getElementById("target-tabs");
+  bar.innerHTML = "";
+  for (const target of targetNames) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "target-tab";
+    btn.dataset.target = target;
+
+    const label = document.createElement("span");
+    label.className = "target-tab-label";
+    label.textContent = target;
+    btn.appendChild(label);
+
+    const status = computeTargetStatus(targetDataByName[target]);
+    const badge = document.createElement("span");
+    badge.className = `status status-${status}`;
+    badge.textContent = status.replace(/_/g, " ");
+    btn.appendChild(badge);
+
+    btn.addEventListener("click", () => setActiveTarget(target));
+    bar.appendChild(btn);
+  }
+}
+
+function setActiveTarget(target) {
+  activeTarget = target;
+  for (const btn of document.querySelectorAll(".target-tab")) {
+    btn.classList.toggle("active", btn.dataset.target === target);
+  }
+  for (const section of document.querySelectorAll(".target-section")) {
+    section.classList.toggle("hidden", section.dataset.target !== target);
+  }
+  updateStickyOffsets();
+}
+
+// table-scroll gets a real max-height so it fills the viewport below the
+// sticky header (and tab bar) without pushing the footer off-screen — same
+// approach as column-mapping's map.js, measuring the currently-visible
+// table-scroll's own position rather than summing nav/header offsetHeight
+// (which misses the CSS margins between them).
+function updateStickyOffsets() {
+  const nav = document.querySelector(".geomerge-nav");
+  document.documentElement.style.setProperty("--nav-height", `${nav ? nav.offsetHeight : 0}px`);
+  const tableScroll = document.querySelector(".target-section:not(.hidden) .table-scroll");
+  if (tableScroll) {
+    const topOffset = tableScroll.getBoundingClientRect().top + window.scrollY;
+    document.documentElement.style.setProperty("--header-height", `${topOffset}px`);
+  }
+}
+window.addEventListener("resize", updateStickyOffsets);
+
 function isIncomplete(s) {
   return s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
 }
 
+async function loadClassifiedCount() {
+  const res = await fetch("api/sources");
+  const sources = await res.json();
+  const rolledUp = (s) => {
+    const values = Object.values(s.targets);
+    if (!values.length || values.every((v) => v === "not_applicable")) return "not_applicable";
+    return values.every((v) => v === "complete" || v === "not_applicable") ? "complete" : "not_complete";
+  };
+  const classifiedCount = sources.filter((s) => rolledUp(s) === "complete").length;
+  document.getElementById("classified-count").textContent = `${classifiedCount} / ${sources.length} sources classified`;
+}
+
 async function load() {
-  document.getElementById("title").textContent = sourceId;
-  document.getElementById("input-path").textContent = `reading: data/preprocessing/${sourceId}/${sourceId}.parquet`;
-  document.getElementById("output-path").textContent = `writing: sources/${sourceId}/classification_map.yaml`;
+  document.getElementById("source-label").innerHTML =
+    `<span class="field-label">Source ID:</span> <button type="button" class="field-value source-card-trigger">${escapeHtml(sourceId)}</button>`;
+  document.querySelector("#source-label .source-card-trigger").addEventListener("click", () => openSourceCard(sourceId));
+
+  document.getElementById("file-paths").innerHTML =
+    `<span class="field-label">Reading:</span> <span class="field-value">data/preprocessing/${escapeHtml(sourceId)}/${escapeHtml(sourceId)}.parquet</span>`;
+
+  const classificationMapPath = `sources/${sourceId}/classification_map.yaml`;
+  document.getElementById("footer-file-path").textContent = classificationMapPath;
 
   const [configRes, dataRes] = await Promise.all([
     fetch("api/config"),
@@ -363,9 +482,23 @@ async function load() {
 
   const container = document.getElementById("targets");
   container.innerHTML = "";
-  for (const [target, targetData] of Object.entries(data.targets)) {
-    container.appendChild(renderTargetSection(target, targetData));
+  const targetNames = Object.keys(data.targets);
+  for (const target of targetNames) {
+    targetDataByName[target] = data.targets[target];
+    container.appendChild(renderTargetSection(target, data.targets[target]));
   }
+
+  renderTabs(targetNames);
+
+  // Default to the first tab that still needs work, so opening a source
+  // drops you where there's something to do rather than always canbics_class.
+  const firstIncomplete = targetNames.find((t) => {
+    const status = computeTargetStatus(targetDataByName[t]);
+    return status === "not_started" || status === "needs_review";
+  });
+  setActiveTarget(firstIncomplete || targetNames[0]);
+
+  loadClassifiedCount();
 }
 
 // Every row already auto-saves itself on its own "Save" click — there's
@@ -381,5 +514,11 @@ document.getElementById("save-next-btn").addEventListener("click", async () => {
   }
 });
 document.getElementById("save-back-btn").addEventListener("click", goHome);
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
 
 load();
