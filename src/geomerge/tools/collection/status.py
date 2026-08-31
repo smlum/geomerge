@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from geomerge.helpers.status import COMPLETE, MISSING, PARTIAL
+
 
 def required_fields(sources_schema_path: Path) -> list:
     schema = yaml.safe_load(sources_schema_path.read_text())
@@ -17,10 +19,10 @@ def source_metadata_status(source_id: str, config: dict) -> str:
     repo_root = config["repo_root"]
     yaml_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
     if not yaml_path.exists():
-        return "missing"
+        return MISSING
     data = yaml.safe_load(yaml_path.read_text()) or {}
     required = required_fields(repo_root / config["sources_schema"])
-    return "complete" if all(str(data.get(f, "")).strip() for f in required) else "partial"
+    return COMPLETE if all(str(data.get(f, "")).strip() for f in required) else PARTIAL
 
 
 def source_raw_data_status(source_id: str, config: dict) -> str:
@@ -31,10 +33,10 @@ def source_raw_data_status(source_id: str, config: dict) -> str:
     repo_root = config["repo_root"]
     yaml_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
     if not yaml_path.exists():
-        return "missing"
+        return MISSING
     data = yaml.safe_load(yaml_path.read_text()) or {}
     raw_filename = data.get("raw_filename")
     if not raw_filename:
-        return "missing"
+        return MISSING
     raw_path = repo_root / config["raw_dir"] / source_id / raw_filename
-    return "complete" if raw_path.exists() else "missing"
+    return COMPLETE if raw_path.exists() else MISSING

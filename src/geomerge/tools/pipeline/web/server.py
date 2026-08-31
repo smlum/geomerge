@@ -28,7 +28,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     sources_dir = repo_root / config["sources_dir"]
 
     bp = Blueprint(
-        "pipeline_tab", __name__,
+        "pipeline", __name__,
         static_folder=str(Path(__file__).parent), static_url_path="",
         template_folder="templates",
     )

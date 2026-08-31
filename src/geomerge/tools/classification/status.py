@@ -8,6 +8,7 @@ import geopandas as gpd
 import yaml
 
 from geomerge.helpers.config import stage_output_dir
+from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_APPLICABLE, NOT_STARTED
 
 
 def load_yaml(path: Path) -> dict:
@@ -63,17 +64,17 @@ def target_status(source_id: str, df, target: str, config: dict) -> str:
     targets_config = config["tools"]["classification"]["targets"]
     columns = present_columns(df, target, targets_config)
     if not columns:
-        return "not_applicable"
+        return NOT_APPLICABLE
     combos = unique_combos(df, columns)
     if not combos:
-        return "not_applicable"
+        return NOT_APPLICABLE
     sources_dir = config["repo_root"] / config["sources_dir"]
     classification_map_path = sources_dir / source_id / "classification_map.yaml"
     mappings = load_yaml(classification_map_path).get(target, {}).get("mappings", [])
     if not mappings:
-        return "not_started"
+        return NOT_STARTED
     covered = sum(1 for combo in combos if find_mapping(mappings, columns, combo["values"]))
-    return "complete" if covered == len(combos) else "needs_review"
+    return COMPLETE if covered == len(combos) else NEEDS_REVIEW
 
 
 def source_status(source_id: str, config: dict) -> dict:
@@ -82,7 +83,7 @@ def source_status(source_id: str, config: dict) -> dict:
     targets_config = config["tools"]["classification"]["targets"]
     path = preprocessed_path(source_id, config)
     if not path.exists():
-        return {"has_preprocessed_data": False, "targets": {name: "not_applicable" for name in targets_config}}
+        return {"has_preprocessed_data": False, "targets": {name: NOT_APPLICABLE for name in targets_config}}
     df = gpd.read_parquet(path)
     return {
         "has_preprocessed_data": True,

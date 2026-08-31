@@ -19,6 +19,7 @@ import yaml
 from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config, stage_output_dir
+from geomerge.helpers.status import COMPLETE, MISSING, NONE, PARTIAL
 
 
 def slugify(text: str) -> str:
@@ -133,24 +134,24 @@ def create_blueprint(config: dict = None) -> Blueprint:
         them — complete only once every one of them is, missing if any
         hasn't even been generated yet."""
         if not row["source_url"]:
-            return "none"
+            return NONE
         source_ids = source_ids_for(row)
         if not source_ids:
-            return "missing"
+            return MISSING
         req = required_fields()
         statuses = []
         for source_id in source_ids:
             yaml_path = yaml_path_for(source_id)
             if not yaml_path.exists():
-                statuses.append("missing")
+                statuses.append(MISSING)
                 continue
             data = yaml.safe_load(yaml_path.read_text()) or {}
-            statuses.append("complete" if all(str(data.get(f, "")).strip() for f in req) else "partial")
-        if all(s == "complete" for s in statuses):
-            return "complete"
-        if any(s == "missing" for s in statuses):
-            return "missing"
-        return "partial"
+            statuses.append(COMPLETE if all(str(data.get(f, "")).strip() for f in req) else PARTIAL)
+        if all(s == COMPLETE for s in statuses):
+            return COMPLETE
+        if any(s == MISSING for s in statuses):
+            return MISSING
+        return PARTIAL
 
     def raw_data_status(row) -> str:
         """missing | complete | none (none = no confirmed source_url yet) —
@@ -159,19 +160,19 @@ def create_blueprint(config: dict = None) -> Blueprint:
         there; declaring a filename doesn't mean it's been downloaded yet,
         so this checks disk directly."""
         if not row["source_url"]:
-            return "none"
+            return NONE
         source_ids = source_ids_for(row)
         if not source_ids:
-            return "missing"
+            return MISSING
         for source_id in source_ids:
             yaml_path = yaml_path_for(source_id)
             if not yaml_path.exists():
-                return "missing"
+                return MISSING
             data = yaml.safe_load(yaml_path.read_text()) or {}
             raw_filename = data.get("raw_filename")
             if not raw_filename or not (raw_dir / source_id / raw_filename).exists():
-                return "missing"
-        return "complete"
+                return MISSING
+        return COMPLETE
 
     @bp.route("/")
     def index():

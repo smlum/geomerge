@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_STARTED
 from geomerge.tools.column_mapping.inspect_raw import raw_column_names
 
 
@@ -52,7 +53,7 @@ def source_status(source_id: str, config: dict) -> dict:
     column_map_path = source_dir / "column_map.yaml"
     has_column_map = column_map_path.exists()
 
-    status = "not_started"
+    status = NOT_STARTED
     flagged = False
     if has_column_map:
         column_map = load_yaml(column_map_path)
@@ -65,15 +66,15 @@ def source_status(source_id: str, config: dict) -> dict:
             # otherwise it'd silently drop out of the "still needs work" pool
             # that findNextSourcePreferUnflagged (map.js) relies on to surface
             # it again once nothing unflagged is left.
-            status = "needs_review"
+            status = NEEDS_REVIEW
         elif has_data:
             try:
                 raw_columns = cached_raw_column_names(raw_path, fmt)
-                status = "complete" if accounted == raw_columns else "needs_review"
+                status = COMPLETE if accounted == raw_columns else NEEDS_REVIEW
             except ValueError:
-                status = "needs_review"
+                status = NEEDS_REVIEW
         else:
-            status = "needs_review"
+            status = NEEDS_REVIEW
 
     return {
         "source_id": source_id,

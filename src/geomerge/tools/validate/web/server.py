@@ -19,6 +19,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template
 
 from geomerge.helpers.config import load_config
+from geomerge.helpers.status import NOT_BUILT
 
 
 def create_blueprint(config: dict = None) -> Blueprint:
@@ -27,7 +28,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     sources_dir = repo_root / config["sources_dir"]
 
     bp = Blueprint(
-        "validate_tab", __name__,
+        "validate", __name__,
         static_folder=str(Path(__file__).parent), static_url_path="",
         template_folder="templates",
     )
@@ -52,7 +53,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 # out) — "not_built" rather than "not_started" so it doesn't
                 # read as "you have work to do" when the real answer is
                 # "there's nothing here yet". Same as home's dashboard.
-                "validation": "not_built",
+                "validation": NOT_BUILT,
             })
         return jsonify(result)
 

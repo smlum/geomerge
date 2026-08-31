@@ -515,10 +515,4 @@ document.getElementById("save-next-btn").addEventListener("click", async () => {
 });
 document.getElementById("save-back-btn").addEventListener("click", goHome);
 
-function escapeHtml(s) {
-  const div = document.createElement("div");
-  div.textContent = s;
-  return div.innerHTML;
-}
-
 load();

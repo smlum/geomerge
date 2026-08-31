@@ -25,10 +25,13 @@ Then open http://localhost:8640
 from pathlib import Path
 
 import yaml
-from flask import Flask, jsonify, render_template
+from flask import Flask, abort, jsonify, render_template, send_from_directory
+from jinja2 import ChoiceLoader, FileSystemLoader
 
 from geomerge.helpers.config import load_config
 from geomerge.helpers.nav import NAV_TABS
+from geomerge.helpers.status import NOT_BUILT
+from geomerge.helpers.status import classification_overall as classification_overall_status
 from geomerge.pipeline.status import preprocessing_status, processing_status
 from geomerge.tools.classification.status import source_status as classification_status
 from geomerge.tools.classification.web.server import create_blueprint as create_classification_blueprint
@@ -36,7 +39,7 @@ from geomerge.tools.collection.status import source_metadata_status, source_raw_
 from geomerge.tools.collection.web.server import create_blueprint as create_collection_blueprint
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
 from geomerge.tools.column_mapping.web.server import create_blueprint as create_column_mapping_blueprint
-from geomerge.tools.pipeline.web.server import create_blueprint as create_pipeline_tab_blueprint
+from geomerge.tools.pipeline.web.server import create_blueprint as create_pipeline_blueprint
 from geomerge.tools.prep.web.server import create_blueprint as create_prep_blueprint
 from geomerge.tools.setup.web.server import create_blueprint as create_setup_blueprint
 from geomerge.tools.validate.web.server import create_blueprint as create_validate_blueprint
@@ -47,12 +50,37 @@ def create_app(config: dict = None) -> Flask:
     repo_root = config["repo_root"]
     sources_dir = repo_root / config["sources_dir"]
 
-    app = Flask(__name__, static_folder=str(Path(__file__).parent), static_url_path="")
+    home_web_dir = Path(__file__).parent
+    shared_web_dir = home_web_dir.parent.parent.parent / "shared" / "web"
+
+    # static_folder/template_folder=None disables Flask's own automatic
+    # handling for both — every other tool's page needs assets from
+    # shared/web/ (nav.css, page-shell.css, base.html, ...) reachable at
+    # plain root-relative URLs like /nav.css, and home's own app.js/style.css
+    # need the same treatment, so both directories have to resolve through
+    # one merged mechanism at "/" rather than Flask's single static_folder.
+    # static_files() and the ChoiceLoader below are that mechanism — same
+    # "try each in order, first match wins" shape Flask already uses to
+    # merge every blueprint's own template_folder, just written out by hand
+    # since Flask has no equivalent built-in for static files.
+    app = Flask(__name__, static_folder=None, template_folder=None)
+    app.jinja_loader = ChoiceLoader([
+        FileSystemLoader(str(shared_web_dir / "templates")),
+        FileSystemLoader(str(home_web_dir / "templates")),
+    ])
+
+    @app.route("/<path:filename>")
+    def static_files(filename):
+        for base_dir in (shared_web_dir, home_web_dir):
+            if (base_dir / filename).is_file():
+                return send_from_directory(base_dir, filename)
+        abort(404)
+
     # Project-level, not per-source — no status.py, no /api/sources entry below.
     app.register_blueprint(create_setup_blueprint(config), url_prefix="/setup")
     app.register_blueprint(create_collection_blueprint(config), url_prefix="/collection")
     app.register_blueprint(create_prep_blueprint(config), url_prefix="/prep")
-    app.register_blueprint(create_pipeline_tab_blueprint(config), url_prefix="/pipeline")
+    app.register_blueprint(create_pipeline_blueprint(config), url_prefix="/pipeline")
     app.register_blueprint(create_validate_blueprint(config), url_prefix="/validate")
     app.register_blueprint(create_column_mapping_blueprint(config), url_prefix="/column-mapping")
     app.register_blueprint(create_classification_blueprint(config), url_prefix="/classification")
@@ -77,19 +105,6 @@ def create_app(config: dict = None) -> Flask:
         cm = column_mapping_status(source_id, config)
         cls = classification_status(source_id, config)
 
-        # One column, not one per target attribute: complete only if
-        # every *applicable* target is complete. not_applicable targets
-        # (e.g. this source has no source_snow_removal column at all)
-        # don't count against it — a source with nothing to classify
-        # isn't "incomplete", it's not_applicable itself.
-        applicable = [s for s in cls["targets"].values() if s != "not_applicable"]
-        if not applicable:
-            classification_overall = "not_applicable"
-        elif all(s == "complete" for s in applicable):
-            classification_overall = "complete"
-        else:
-            classification_overall = "not_complete"
-
         return {
             "source_id": source_id,
             # collection/ — what the collection checklist tool produces:
@@ -111,7 +126,7 @@ def create_app(config: dict = None) -> Flask:
             "tools": {
                 "column_mapping": cm["column_map_status"],
                 "preprocessing": preprocessing_status(source_id, config),
-                "classification": classification_overall,
+                "classification": classification_overall_status(cls["targets"]),
             },
             # pipeline/ — mechanical processing with no human decisions
             # of its own. Validation is a placeholder — no automated-
@@ -121,7 +136,7 @@ def create_app(config: dict = None) -> Flask:
             # when the real answer is "there's nothing here yet".
             "pipeline": {
                 "processing": processing_status(source_id, config),
-                "validation": "not_built",
+                "validation": NOT_BUILT,
             },
         }
 

@@ -17,21 +17,10 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template
 
 from geomerge.helpers.config import load_config
+from geomerge.helpers.status import classification_overall
 from geomerge.pipeline.status import preprocessing_status
 from geomerge.tools.classification.status import source_status as classification_status
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
-
-
-def classification_overall(cls: dict) -> str:
-    # Same rollup as geomerge serve: complete only if every *applicable*
-    # target is complete — a source with nothing to classify isn't
-    # "incomplete", it's not_applicable itself.
-    applicable = [s for s in cls["targets"].values() if s != "not_applicable"]
-    if not applicable:
-        return "not_applicable"
-    if all(s == "complete" for s in applicable):
-        return "complete"
-    return "not_complete"
 
 
 def create_blueprint(config: dict = None) -> Blueprint:
@@ -74,7 +63,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 # preprocessing produces, not raw ones), so it sits between
                 # the two review steps here rather than off in pipeline/.
                 "preprocessing": preprocessing_status(source_id, config),
-                "classification": classification_overall(cls),
+                "classification": classification_overall(cls["targets"]),
             })
         return jsonify(result)
 

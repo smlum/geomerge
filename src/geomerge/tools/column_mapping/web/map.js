@@ -291,12 +291,6 @@ async function save(destination) {
   }
 }
 
-function escapeHtml(s) {
-  const div = document.createElement("div");
-  div.textContent = s;
-  return div.innerHTML;
-}
-
 function cssEscape(s) {
   return s.replace(/[^a-zA-Z0-9_-]/g, "_");
 }

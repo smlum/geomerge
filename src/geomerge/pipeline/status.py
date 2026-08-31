@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from geomerge.helpers.config import stage_output_dir
+from geomerge.helpers.status import COMPLETE, NOT_BUILT, STALE
 
 
 def load_yaml(path: Path) -> dict:
@@ -29,7 +30,7 @@ def preprocessing_status(source_id: str, config: dict) -> str:
     repo_root = config["repo_root"]
     output_path = stage_output_dir(config, "preprocessing") / source_id / f"{source_id}.parquet"
     if not output_path.exists():
-        return "not_built"
+        return NOT_BUILT
 
     source_dir = repo_root / config["sources_dir"] / source_id
     metadata = load_yaml(source_dir / "metadata.yaml")
@@ -41,8 +42,8 @@ def preprocessing_status(source_id: str, config: dict) -> str:
     newest_input = _newest_mtime(inputs)
     output_mtime = _mtime(output_path)
     if newest_input and output_mtime and newest_input > output_mtime:
-        return "stale"
-    return "complete"
+        return STALE
+    return COMPLETE
 
 
 def processing_status(source_id: str, config: dict) -> str:
@@ -51,7 +52,7 @@ def processing_status(source_id: str, config: dict) -> str:
     repo_root = config["repo_root"]
     output_path = stage_output_dir(config, "processing") / source_id / f"{source_id}.parquet"
     if not output_path.exists():
-        return "not_built"
+        return NOT_BUILT
 
     preprocessing_output = stage_output_dir(config, "preprocessing") / source_id / f"{source_id}.parquet"
     classification_map_path = repo_root / config["sources_dir"] / source_id / "classification_map.yaml"
@@ -59,5 +60,5 @@ def processing_status(source_id: str, config: dict) -> str:
     newest_input = _newest_mtime([preprocessing_output, classification_map_path])
     output_mtime = _mtime(output_path)
     if newest_input and output_mtime and newest_input > output_mtime:
-        return "stale"
-    return "complete"
+        return STALE
+    return COMPLETE

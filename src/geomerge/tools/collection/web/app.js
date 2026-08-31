@@ -1003,12 +1003,6 @@ async function postJson(url, body) {
   return { ok: true, ...data };
 }
 
-function escapeHtml(s) {
-  const div = document.createElement("div");
-  div.textContent = s;
-  return div.innerHTML;
-}
-
 const filterSelect = document.getElementById("filter-mode");
 const savedFilter = localStorage.getItem("checklist-filter-mode");
 if (savedFilter) filterSelect.value = savedFilter;
