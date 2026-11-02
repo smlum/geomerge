@@ -13,3 +13,10 @@ NOT_INCLUDED = "not_included"
 # this into the row-exclusion check; it just leaves the target field blank
 # for that row.
 IGNORED = "ignored"
+
+# Optional per-mapping review markers in classification_map.yaml. "unsure" is
+# a best guess to re-check later (cleared once re-reviewed); "conflict" is a
+# standing record that the decision disagrees with what the source's own
+# label implies. Neither affects status or classify:apply — a flagged mapping
+# is still a decided one.
+REVIEW_FLAGS = ("unsure", "conflict")

@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 from flask import Blueprint, jsonify, redirect, render_template, request
 
 from geomerge.helpers.config import load_config
-from geomerge.helpers.constants import IGNORED, NOT_INCLUDED
+from geomerge.helpers.constants import IGNORED, NOT_INCLUDED, REVIEW_FLAGS
 from geomerge.helpers.geo_sampling import sample_points
 from geomerge.helpers.matching import match_name, normalize
 from geomerge.helpers.schema import get_field
@@ -193,6 +193,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
                         "target": existing["target"],
                         "method": existing.get("method", "manual"),
                         "notes": existing.get("notes", ""),
+                        "flag": existing.get("flag", ""),
                         "confidence": "saved",
                         "prior_year_match": prior_year_match,
                     })
@@ -211,6 +212,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
                     "target": suggested,
                     "method": "rule" if suggested else None,
                     "notes": "",
+                    "flag": "",
                     "confidence": confidence,
                     "prior_year_match": prior_year_match,
                 })
@@ -223,15 +225,17 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 "groups": groups,
             }
 
-        return jsonify({"source_id": source_id, "targets": result})
+        return jsonify({"source_id": source_id, "source_notes": saved.get("notes", ""), "targets": result})
 
     # Bulk save — every row of the currently-open tab's table in one request,
     # same "single save button at bottom" model as column_mapping's map.js
     # rather than each row auto-saving itself on its own click. "entries" is
-    # a list of {values, target_value, method, notes}; a row the reviewer
+    # a list of {values, target_value, method, notes, flag}; a row the reviewer
     # left blank is simply omitted by the client rather than sent with an
     # empty target_value, so this endpoint doesn't need to distinguish
     # "explicitly cleared" from "never touched" — see review.js's save flow.
+    # "source_notes", when present, replaces the file's top-level `notes`, and
+    # can be sent without any entries.
     @bp.route("/api/classification/<source_id>", methods=["POST"])
     def api_classification_save(source_id):
         if not is_eligible(source_id, config):
@@ -241,33 +245,49 @@ def create_blueprint(config: dict = None) -> Blueprint:
         target = data.get("target")
         entries = data.get("entries") or []
 
-        if target not in targets:
+        if not entries and "source_notes" not in data:
+            return jsonify({"error": "entries or source_notes required"}), 400
+        if entries and target not in targets:
             return jsonify({"error": f"unknown target '{target}'"}), 400
-        if not entries:
-            return jsonify({"error": "entries required"}), 400
-
-        columns = targets[target]["source_columns"]
-        saved = load_classification_map(source_id)
-        target_entry = saved.setdefault(target, {"source_columns": columns, "mappings": []})
-        target_entry["source_columns"] = columns
-
         for item in entries:
-            values = item.get("values")
-            target_value = (item.get("target_value") or "").strip()
-            method = item.get("method") or "manual"
-            notes = (item.get("notes") or "").strip()
-            if not values or not target_value:
-                continue
+            flag = item.get("flag")
+            if flag and flag not in REVIEW_FLAGS:
+                return jsonify({"error": f"unknown flag '{flag}'"}), 400
 
-            entry = {"values": values, "target": target_value, "method": method}
-            if notes:
-                entry["notes"] = notes
+        saved = load_classification_map(source_id)
 
-            existing = find_mapping(target_entry["mappings"], columns, values)
-            if existing:
-                target_entry["mappings"][target_entry["mappings"].index(existing)] = entry
-            else:
-                target_entry["mappings"].append(entry)
+        if "source_notes" in data:
+            source_notes = (data["source_notes"] or "").strip()
+            saved.pop("notes", None)
+            if source_notes:
+                # First in the file, above the per-target sections.
+                saved = {"notes": source_notes, **saved}
+
+        if entries:
+            columns = targets[target]["source_columns"]
+            target_entry = saved.setdefault(target, {"source_columns": columns, "mappings": []})
+            target_entry["source_columns"] = columns
+
+            for item in entries:
+                values = item.get("values")
+                target_value = (item.get("target_value") or "").strip()
+                method = item.get("method") or "manual"
+                notes = (item.get("notes") or "").strip()
+                flag = item.get("flag")
+                if not values or not target_value:
+                    continue
+
+                entry = {"values": values, "target": target_value, "method": method}
+                if flag:
+                    entry["flag"] = flag
+                if notes:
+                    entry["notes"] = notes
+
+                existing = find_mapping(target_entry["mappings"], columns, values)
+                if existing:
+                    target_entry["mappings"][target_entry["mappings"].index(existing)] = entry
+                else:
+                    target_entry["mappings"].append(entry)
 
         save_classification_map(source_id, saved)
         return jsonify({"ok": True})
@@ -283,6 +303,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "n_samples": street_view_config.get("n_samples", 3),
             "not_included_value": NOT_INCLUDED,
             "ignored_value": IGNORED,
+            "review_flags": list(REVIEW_FLAGS),
             "prior_year_dictionary_target": (prior_year_dictionary_config or {}).get("target"),
             "prior_year_dictionary_label": (prior_year_dictionary_config or {}).get("label"),
         })

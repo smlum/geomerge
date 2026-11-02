@@ -50,6 +50,27 @@ async function copyCommand(badge, command) {
   }, 1000);
 }
 
+// Classification's status link, plus any follow-ups left on the source: its
+// note (full text on hover) and a count per flag.
+function classificationCell(s) {
+  const td = linkedCell(s.classification, `/classification/review.html?id=${encodeURIComponent(s.source_id)}`);
+  if (s.classification_notes) {
+    const note = document.createElement("span");
+    note.className = "review-marker";
+    note.textContent = "note";
+    note.title = s.classification_notes;
+    td.appendChild(note);
+  }
+  for (const [flag, count] of Object.entries(s.classification_flag_counts)) {
+    if (!count) continue;
+    const marker = document.createElement("span");
+    marker.className = `review-marker review-marker-${flag}`;
+    marker.textContent = `${count} ${flag}`;
+    td.appendChild(marker);
+  }
+  return td;
+}
+
 // "Complete" means all three stages are done (or not applicable) for this
 // source — same complete/not_applicable rule as home's rollups.
 function isRowComplete(s) {
@@ -75,7 +96,7 @@ function renderRow(s) {
 
   tr.appendChild(linkedCell(s.column_mapping, `/column-mapping/map.html?id=${encodeURIComponent(s.source_id)}`));
   tr.appendChild(preprocessingCell(s.preprocessing, s.source_id));
-  tr.appendChild(linkedCell(s.classification, `/classification/review.html?id=${encodeURIComponent(s.source_id)}`));
+  tr.appendChild(classificationCell(s));
 
   return tr;
 }
@@ -106,6 +127,8 @@ function render() {
     visible = sources.filter(isRowComplete);
   } else if (filterMode === "incomplete") {
     visible = sources.filter((s) => !isRowComplete(s));
+  } else if (filterMode === "follow_up") {
+    visible = sources.filter((s) => s.classification_notes || s.classification_flagged);
   }
 
   const body = document.getElementById("rows-body");
@@ -124,11 +147,7 @@ function render() {
   const classifiedCount = sources.filter(
     (s) => s.classification === "complete" || s.classification === "not_applicable"
   ).length;
-  // "flagged at collection, column mapping, or classify" — classification
-  // has no flag feature of its own yet (column_mapping_flagged and
-  // collection_flagged are the only real signals today), but OR-ing against
-  // classification_flagged now means adding one later just works, no
-  // rework needed here.
+  // "flagged at collection, column mapping, or classify".
   const flaggedCount = sources.filter(
     (s) => s.column_mapping_flagged || s.collection_flagged || s.classification_flagged
   ).length;

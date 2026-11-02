@@ -343,11 +343,64 @@ async function openPriorYearModal() {
   body.appendChild(wrap);
 }
 
+// --- Flag & note modal ------------------------------------------------------
+// A modal rather than a popover anchored to the row, since .table-scroll's
+// overflow would clip one. Closing it any way applies the edit to the row
+// (nothing is written until a Save button), so a typed note can't be lost to
+// a stray backdrop click.
+
+let flagModalRef = null;
+
+function groupLabel(group) {
+  return Object.values(group.values).map((v) => (v === "" ? "(blank)" : v)).join(" · ");
+}
+
+function updateFlagButton(ref) {
+  const { flagBtn, flag, notes } = ref;
+  flagBtn.className = flag ? `flag-btn flag-${flag}` : "flag-btn";
+  const label = flag || (notes ? "Note" : "Flag");
+  flagBtn.textContent = flag && notes ? `${label} ✎` : label;
+  flagBtn.title = notes;
+}
+
+function openFlagModal(ref) {
+  flagModalRef = ref;
+  document.getElementById("flag-modal-row").textContent = groupLabel(ref.group);
+  document.getElementById("flag-modal-notes").value = ref.notes;
+
+  const optionsEl = document.getElementById("flag-modal-options");
+  optionsEl.innerHTML = "";
+  for (const flag of ["", ...appConfig.review_flags]) {
+    const label = document.createElement("label");
+    label.className = "flag-option";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "flag-modal-flag";
+    radio.value = flag;
+    radio.checked = ref.flag === flag;
+    label.append(radio, ` ${flag || "No flag"}`);
+    optionsEl.appendChild(label);
+  }
+
+  document.getElementById("flag-modal").classList.remove("hidden");
+}
+
+function closeFlagModal() {
+  if (!flagModalRef) return;
+  const ref = flagModalRef;
+  flagModalRef = null;
+  ref.flag = document.querySelector('input[name="flag-modal-flag"]:checked')?.value ?? "";
+  ref.notes = document.getElementById("flag-modal-notes").value.trim();
+  document.getElementById("flag-modal").classList.add("hidden");
+  updateFlagButton(ref);
+  updateFlagFilter(ref.target);
+}
+
 // --- Group rows ---------------------------------------------------------
 
 // Returns {tr, ref} — ref is what saveTarget() reads back at save time
 // ({group, field, filterOutCheckbox, ignoreCheckbox, initialValue,
-// initialMethod}), collected into targetRowRefs[target] by
+// initialMethod, flag, notes}), collected into targetRowRefs[target] by
 // renderTargetSection below. No per-row save button/status text any more
 // (see saveTarget) — a row just holds its live field state until one of
 // the Save buttons reads it.
@@ -479,13 +532,26 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
     tr.appendChild(svTd);
   }
 
-  return { tr, ref: { group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod } };
+  const ref = {
+    target, tr, group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod,
+    flag: group.flag || "", notes: group.notes || "",
+  };
+
+  const flagTd = document.createElement("td");
+  ref.flagBtn = document.createElement("button");
+  ref.flagBtn.type = "button";
+  ref.flagBtn.addEventListener("click", () => openFlagModal(ref));
+  updateFlagButton(ref);
+  flagTd.appendChild(ref.flagBtn);
+  tr.appendChild(flagTd);
+
+  return { tr, ref };
 }
 
 // --- Target sections (one per tab) --------------------------------------
 
 const targetDataByName = {}; // target -> targetData, kept for tab status recompute after a save
-const targetRowRefs = {}; // target -> [{group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod}], read by saveTarget()
+const targetRowRefs = {}; // target -> [{target, tr, group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod, flag, notes, flagBtn}], read by saveTarget()
 
 // not_applicable: no source columns configured/present, or no value combos
 // at all. not_started: nothing saved yet. complete: every combo has a saved
@@ -499,6 +565,16 @@ function computeTargetStatus(targetData) {
   const covered = targetData.groups.filter((g) => g.confidence === "saved").length;
   if (covered === 0) return "not_started";
   return covered === targetData.groups.length ? "complete" : "needs_review";
+}
+
+// Re-applies the tab's "Flagged only" checkbox and refreshes its count — for
+// after any change to a row's flag, as well as the checkbox itself.
+function updateFlagFilter(target) {
+  const section = document.querySelector(`.target-section[data-target="${target}"]`);
+  const refs = targetRowRefs[target] || [];
+  const flaggedOnly = section.querySelector(".flag-filter input").checked;
+  for (const ref of refs) ref.tr.hidden = flaggedOnly && !ref.flag;
+  section.querySelector(".flag-filter-count").textContent = `(${refs.filter((ref) => ref.flag).length})`;
 }
 
 function updateTabStatus(target) {
@@ -523,16 +599,25 @@ function renderTargetSection(target, targetData) {
     return section;
   }
 
+  const toolbar = document.createElement("div");
+  toolbar.className = "target-toolbar";
   if (targetData.show_prior_year) {
-    const toolbar = document.createElement("div");
-    toolbar.className = "target-toolbar";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = priorYearLabel();
     btn.addEventListener("click", openPriorYearModal);
     toolbar.appendChild(btn);
-    section.appendChild(toolbar);
   }
+  const flagFilter = document.createElement("label");
+  flagFilter.className = "flag-filter meta";
+  const flagFilterCheckbox = document.createElement("input");
+  flagFilterCheckbox.type = "checkbox";
+  flagFilterCheckbox.addEventListener("change", () => updateFlagFilter(target));
+  const flagFilterCount = document.createElement("span");
+  flagFilterCount.className = "flag-filter-count";
+  flagFilter.append(flagFilterCheckbox, "Flagged only", flagFilterCount);
+  toolbar.appendChild(flagFilter);
+  section.appendChild(toolbar);
 
   const columns = targetData.source_columns;
   const table = document.createElement("table");
@@ -558,6 +643,9 @@ function renderTargetSection(target, targetData) {
     col.style.width = "110px";
     colgroup.appendChild(col);
   }
+  const flagCol = document.createElement("col");
+  flagCol.style.width = "110px";
+  colgroup.appendChild(flagCol);
   table.appendChild(colgroup);
 
   const thead = document.createElement("thead");
@@ -582,6 +670,9 @@ function renderTargetSection(target, targetData) {
     th.textContent = "Street View";
     headRow.appendChild(th);
   }
+  const flagTh = document.createElement("th");
+  flagTh.textContent = "Review";
+  headRow.appendChild(flagTh);
   thead.appendChild(headRow);
   table.appendChild(thead);
 
@@ -726,13 +817,23 @@ function rowValue(ref) {
 
 async function saveTarget(target) {
   const refs = targetRowRefs[target] || [];
+
+  // A blank row isn't saved, so its flag or note would silently vanish —
+  // stop here instead, on the tab the row is on.
+  const stranded = refs.find((ref) => !rowValue(ref) && (ref.flag || ref.notes));
+  if (stranded) {
+    setActiveTarget(target);
+    setSaving(false, `"${groupLabel(stranded.group)}" has a flag or note but no target — choose one or clear it`);
+    return false;
+  }
+
   const entries = [];
   for (const ref of refs) {
     const value = rowValue(ref);
     if (!value) continue;
     const isSkip = ref.filterOutCheckbox.checked || ref.ignoreCheckbox.checked;
     const method = !isSkip && value === ref.initialValue && ref.initialMethod === "rule" ? "rule" : "manual";
-    entries.push({ values: ref.group.values, target_value: value, method });
+    entries.push({ values: ref.group.values, target_value: value, method, flag: ref.flag, notes: ref.notes });
   }
 
   if (!entries.length) return true; // nothing changed on this tab — not an error, just nothing to send
@@ -757,6 +858,32 @@ async function saveTarget(target) {
     if (rowValue(ref)) ref.group.confidence = "saved";
   }
   updateTabStatus(target);
+  return true;
+}
+
+// Only sent when it actually changed, so a Save that touches nothing else
+// doesn't rewrite the file (and mark processing stale) just for this.
+let savedSourceNotes = "";
+
+async function saveSourceNotes() {
+  const notes = document.getElementById("source-notes").value.trim();
+  if (notes === savedSourceNotes) return true;
+  try {
+    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_notes: notes }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setSaving(false, data.error || "Failed to save");
+      return false;
+    }
+  } catch (e) {
+    setSaving(false, `Something went wrong: ${e}`);
+    return false;
+  }
+  savedSourceNotes = notes;
   return true;
 }
 
@@ -835,7 +962,12 @@ async function load() {
   for (const target of allTargetNames) {
     targetDataByName[target] = data.targets[target];
     container.appendChild(renderTargetSection(target, data.targets[target]));
+    if (data.targets[target].source_columns.length) updateFlagFilter(target);
   }
+
+  savedSourceNotes = data.source_notes || "";
+  document.getElementById("source-notes").value = savedSourceNotes;
+  document.getElementById("source-notes-wrap").classList.remove("hidden");
 
   renderTabs(allTargetNames);
 
@@ -855,15 +987,15 @@ async function load() {
 // several tabs before any one of them feels "done" (see saveAllTargets).
 document.getElementById("save-btn").addEventListener("click", async () => {
   setSaving(true, "Saving…");
-  const ok = await saveAllTargets();
-  setSaving(false, ok ? "Saved ✓" : undefined);
+  const ok = (await saveSourceNotes()) && (await saveAllTargets());
+  if (ok) setSaving(false, "Saved ✓"); // on failure, the error is already showing
 });
 
 // Saves the active tab, then advances: to the next tab still needing work
 // on this source if there is one, otherwise to the next source (or home).
 document.getElementById("save-next-btn").addEventListener("click", async () => {
   setSaving(true, "Saving…");
-  const ok = await saveTarget(activeTarget);
+  const ok = (await saveSourceNotes()) && (await saveTarget(activeTarget));
   if (!ok) return;
 
   const nextTarget = findNextIncompleteTarget(activeTarget);
@@ -886,7 +1018,7 @@ document.getElementById("save-next-btn").addEventListener("click", async () => {
 // unsaved edits on the way out" reasoning as Save & next above.
 document.getElementById("save-back-btn").addEventListener("click", async () => {
   setSaving(true, "Saving…");
-  const ok = await saveTarget(activeTarget);
+  const ok = (await saveSourceNotes()) && (await saveTarget(activeTarget));
   if (!ok) return;
   goHome();
 });

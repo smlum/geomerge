@@ -8,6 +8,7 @@ import geopandas as gpd
 import yaml
 
 from geomerge.helpers.config import stage_output_dir
+from geomerge.helpers.constants import REVIEW_FLAGS
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_APPLICABLE, NOT_STARTED
 from geomerge.pipeline.status import preprocessing_status
 from geomerge.tools.collection.status import source_flagged as collection_flagged
@@ -95,6 +96,21 @@ def target_status(source_id: str, df, target: str, config: dict) -> str:
         return NOT_STARTED
     covered = sum(1 for combo in combos if find_mapping(mappings, columns, combo["values"]))
     return COMPLETE if covered == len(combos) else NEEDS_REVIEW
+
+
+def review_markers(source_id: str, config: dict) -> dict:
+    """{"notes": source-level note, "flag_counts": {flag: n, ...}} from
+    classification_map.yaml alone — no parquet read, so it's cheap to call for
+    every source on the Prepare dashboard."""
+    targets_config = config["tools"]["classification"]["targets"]
+    sources_dir = config["repo_root"] / config["sources_dir"]
+    saved = load_yaml(sources_dir / source_id / "classification_map.yaml")
+    flag_counts = {flag: 0 for flag in REVIEW_FLAGS}
+    for target in targets_config:
+        for mapping in saved.get(target, {}).get("mappings", []):
+            if mapping.get("flag") in flag_counts:
+                flag_counts[mapping["flag"]] += 1
+    return {"notes": saved.get("notes", ""), "flag_counts": flag_counts}
 
 
 def source_status(source_id: str, config: dict) -> dict:

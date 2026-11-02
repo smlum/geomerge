@@ -26,6 +26,10 @@
   <div id="error" class="error hidden"></div>
 
   <div class="content-area">
+    <div id="source-notes-wrap" class="source-notes hidden">
+      <label class="field-label" for="source-notes">Source notes</label>
+      <textarea id="source-notes" rows="2" placeholder="Anything to follow up on for this source, e.g. contact the municipality"></textarea>
+    </div>
     <div id="target-tabs" class="target-tabs"></div>
     <div id="targets"></div>
 
@@ -75,6 +79,25 @@
       <div id="prior-year-body"></div>
     </div>
   </div>
+
+  <div id="flag-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2>Flag &amp; note</h2>
+          <div id="flag-modal-row" class="meta"></div>
+        </div>
+        <button id="flag-modal-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="flag-modal-options" class="flag-options"></div>
+      <label class="field-label" for="flag-modal-notes">Note</label>
+      <textarea id="flag-modal-notes" rows="4"></textarea>
+      <div class="modal-actions">
+        <button id="flag-modal-done" type="button">Done</button>
+        <span class="meta">Saved with the rest of the tab.</span>
+      </div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
@@ -90,6 +113,14 @@
     document.getElementById("prior-year-close").addEventListener("click", closePriorYearModal);
     document.getElementById("prior-year-modal").addEventListener("click", (e) => {
       if (e.target.id === "prior-year-modal") closePriorYearModal();
+    });
+    document.getElementById("flag-modal-close").addEventListener("click", closeFlagModal);
+    document.getElementById("flag-modal-done").addEventListener("click", closeFlagModal);
+    document.getElementById("flag-modal").addEventListener("click", (e) => {
+      if (e.target.id === "flag-modal") closeFlagModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeFlagModal();
     });
   </script>
 {% endblock %}

@@ -73,3 +73,25 @@ th {
 td a {
   text-decoration: none;
 }
+
+/* Follow-ups beside the Classify status — see app.js's classificationCell. */
+.review-marker {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.review-marker-unsure {
+  border-color: var(--ctp-yellow);
+  color: var(--ctp-yellow);
+}
+
+.review-marker-conflict {
+  border-color: var(--ctp-red);
+  color: var(--ctp-red);
+}

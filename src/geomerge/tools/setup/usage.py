@@ -67,6 +67,9 @@ def build_usage_index(config: dict) -> dict:
 
         cls = load_yaml(source_dir / "classification_map.yaml")
         for target_field, entry in cls.items():
+            # Top-level non-target keys, e.g. the source-level `notes` string.
+            if not isinstance(entry, dict):
+                continue
             index[target_field]["classification_target_sources"].append(sid)
             for col in entry.get("source_columns", []):
                 index[col]["classification_source_column_sources"].append(sid)

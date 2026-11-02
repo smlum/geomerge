@@ -19,6 +19,7 @@ from flask import Blueprint, jsonify, render_template
 from geomerge.helpers.config import load_config
 from geomerge.helpers.status import classification_overall
 from geomerge.pipeline.status import preprocessing_status
+from geomerge.tools.classification.status import review_markers
 from geomerge.tools.classification.status import source_status as classification_status
 from geomerge.tools.collection.status import source_flagged as collection_flagged
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
@@ -50,15 +51,18 @@ def create_blueprint(config: dict = None) -> Blueprint:
         for source_id in source_ids():
             cm = column_mapping_status(source_id, config)
             cls = classification_status(source_id, config)
+            markers = review_markers(source_id, config)
             result.append({
                 "source_id": source_id,
                 "column_mapping": cm["column_map_status"],
                 # For the footer's "N flagged" stat (app.js) — column mapping's
                 # own "revisit later" flag (see column_mapping/status.py).
-                # Classification has no equivalent flag feature yet; app.js
-                # ORs this against a classification_flagged field that simply
-                # doesn't exist yet, so adding one later needs no rework here.
                 "column_mapping_flagged": cm["flagged"],
+                # Follow-ups left during classification. Unlike the two flags
+                # here that gate eligibility, these never block anything.
+                "classification_notes": markers["notes"],
+                "classification_flag_counts": markers["flag_counts"],
+                "classification_flagged": any(markers["flag_counts"].values()),
                 # Collection-stage flag (checklist.csv, joined via
                 # metadata.yaml's provider_id) — disconnected from
                 # column_mapping's own flag above, but both now gate
