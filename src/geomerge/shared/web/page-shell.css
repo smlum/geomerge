@@ -190,6 +190,12 @@ select {
   font-style: italic;
 }
 
+/* A dashboard row whose real status hasn't arrived yet. */
+.status-loading {
+  color: var(--color-text-secondary);
+  background: var(--ctp-surface0);
+}
+
 /* status-partial/-missing are collection.metadata's own status vocabulary
    (distinct from the not_started/needs_review/... one everything else
    uses) — grouped into the same yellow/red as their nearest equivalent

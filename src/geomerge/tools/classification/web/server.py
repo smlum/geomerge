@@ -33,16 +33,16 @@ from geomerge.helpers.constants import IGNORED, NOT_INCLUDED, REVIEW_FLAGS
 from geomerge.helpers.geo_sampling import sample_points
 from geomerge.helpers.matching import match_name, normalize
 from geomerge.helpers.schema import get_field
-from geomerge.tools.classification.prior_year import prior_year_lookup, prior_year_rows
+from geomerge.tools.classification.prior_year import prior_year_lookup
 from geomerge.tools.classification.status import (
+    columns_and_combos,
     find_mapping,
     is_eligible,
     load_yaml,
     preprocessed_path,
     present_columns,
+    source_status,
     stringify,
-    target_status,
-    unique_combos,
 )
 
 
@@ -138,18 +138,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
     # still needs work — not a list-of-sources page (that's home's job now).
     @bp.route("/api/sources")
     def api_sources():
-        result = []
-        for source_id in source_ids():
-            if not preprocessed_path(source_id, config).exists():
-                result.append({"source_id": source_id, "has_preprocessed_data": False, "targets": {}})
-                continue
-            df = load_preprocessed(source_id)
-            result.append({
-                "source_id": source_id,
-                "has_preprocessed_data": True,
-                "targets": {name: target_status(source_id, df, name, config) for name in targets},
-            })
-        return jsonify(result)
+        return jsonify([{"source_id": source_id, **source_status(source_id, config)} for source_id in source_ids()])
 
     @bp.route("/api/classification/<source_id>")
     def api_classification_get(source_id):
@@ -161,7 +150,6 @@ def create_blueprint(config: dict = None) -> Blueprint:
                          "resolve that before classifying"
             }), 409
 
-        df = load_preprocessed(source_id)
         saved = load_classification_map(source_id)
 
         # The prior-year match is both the first suggestion and a visual
@@ -172,7 +160,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
         result = {}
         for target, target_config in targets.items():
-            columns = present_columns(df, target, targets)
+            columns, combos = columns_and_combos(source_id, target, config)
             options = target_options(target)
             street_view = bool(target_config.get("street_view", False))
 
@@ -183,7 +171,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
             mappings = saved.get(target, {}).get("mappings", [])
             show_prior_year = target == prior_year_target
             groups = []
-            for combo in unique_combos(df, columns):
+            for combo in combos:
                 prior_year_match = prior_year_map.get(normalize(combo["values"].get(columns[0], ""))) if show_prior_year else None
                 existing = find_mapping(mappings, columns, combo["values"])
                 if existing:
@@ -307,14 +295,6 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "prior_year_dictionary_target": (prior_year_dictionary_config or {}).get("target"),
             "prior_year_dictionary_label": (prior_year_dictionary_config or {}).get("label"),
         })
-
-    # Read-only reference lookup — a prior classification effort's
-    # source_class -> canbics_class decisions for this source's municipality
-    # (see prior_year.py). Not part of the review/save flow: nothing here
-    # is written to classification_map.yaml.
-    @bp.route("/api/classification/<source_id>/prior_year_dictionary")
-    def api_prior_year_dictionary(source_id):
-        return jsonify({"rows": prior_year_rows(source_id, config)})
 
     @bp.route("/api/sample_points/<source_id>", methods=["POST"])
     def api_sample_points(source_id):

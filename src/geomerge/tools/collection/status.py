@@ -5,13 +5,13 @@ in its table."""
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
+from geomerge.helpers.file_cache import cached_read, cached_yaml
 from geomerge.helpers.status import COMPLETE, MISSING, PARTIAL
 
 
 def required_fields(sources_schema_path: Path) -> list:
-    schema = yaml.safe_load(sources_schema_path.read_text())
+    schema = cached_yaml(sources_schema_path)
     return [f["name"] for f in schema["fields"] if f.get("required")]
 
 
@@ -21,7 +21,7 @@ def source_metadata_status(source_id: str, config: dict) -> str:
     yaml_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
     if not yaml_path.exists():
         return MISSING
-    data = yaml.safe_load(yaml_path.read_text()) or {}
+    data = cached_yaml(yaml_path)
     required = required_fields(repo_root / config["sources_schema"])
     return COMPLETE if all(str(data.get(f, "")).strip() for f in required) else PARTIAL
 
@@ -35,12 +35,18 @@ def source_raw_data_status(source_id: str, config: dict) -> str:
     yaml_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
     if not yaml_path.exists():
         return MISSING
-    data = yaml.safe_load(yaml_path.read_text()) or {}
+    data = cached_yaml(yaml_path)
     raw_filename = data.get("raw_filename")
     if not raw_filename:
         return MISSING
     raw_path = repo_root / config["raw_dir"] / source_id / raw_filename
     return COMPLETE if raw_path.exists() else MISSING
+
+
+def _flagged_provider_ids(checklist_path: Path) -> set:
+    checklist = pd.read_csv(checklist_path, dtype=str).fillna("")
+    first_rows = checklist.drop_duplicates("provider_id")
+    return set(first_rows.loc[first_rows["flagged"] == "x", "provider_id"])
 
 
 def source_flagged(source_id: str, config: dict) -> bool:
@@ -51,7 +57,7 @@ def source_flagged(source_id: str, config: dict) -> bool:
     metadata_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
     if not metadata_path.exists():
         return False
-    metadata = yaml.safe_load(metadata_path.read_text()) or {}
+    metadata = cached_yaml(metadata_path)
     provider_id = metadata.get("provider_id")
     if not provider_id:
         return False
@@ -59,6 +65,4 @@ def source_flagged(source_id: str, config: dict) -> bool:
     checklist_path = repo_root / config["sources_dir"] / "checklist.csv"
     if not checklist_path.exists():
         return False
-    checklist = pd.read_csv(checklist_path, dtype=str).fillna("")
-    row = checklist[checklist["provider_id"] == provider_id]
-    return bool(len(row)) and row.iloc[0]["flagged"] == "x"
+    return provider_id in cached_read(checklist_path, _flagged_provider_ids)

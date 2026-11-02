@@ -4,11 +4,13 @@ source_status is what geomerge serve shows in its table."""
 import math
 from pathlib import Path
 
-import geopandas as gpd
+import pandas as pd
+import pyarrow.parquet as pq
 import yaml
 
 from geomerge.helpers.config import stage_output_dir
 from geomerge.helpers.constants import REVIEW_FLAGS
+from geomerge.helpers.file_cache import cached_read, cached_yaml
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_APPLICABLE, NOT_STARTED
 from geomerge.pipeline.status import preprocessing_status
 from geomerge.tools.collection.status import source_flagged as collection_flagged
@@ -52,6 +54,25 @@ def unique_combos(df, columns: list) -> list:
     return combos
 
 
+def _read_column_names(path: Path) -> set:
+    return set(pq.read_schema(path).names)
+
+
+def _read_combos(path: Path, columns: tuple) -> list:
+    return unique_combos(pd.read_parquet(path, columns=list(columns)), list(columns))
+
+
+def columns_and_combos(source_id: str, target: str, config: dict) -> tuple:
+    """(present columns, unique_combos) for one target, without loading the
+    parquet's geometry, and cached until the parquet changes. The combos are
+    shared between callers — treat them as read-only."""
+    path = preprocessed_path(source_id, config)
+    source_columns = config["tools"]["classification"]["targets"][target]["source_columns"]
+    names = cached_read(path, _read_column_names)
+    columns = [c for c in source_columns if c in names]
+    return columns, cached_read(path, _read_combos, tuple(columns)) if columns else []
+
+
 def find_mapping(mappings: list, columns: list, values: dict):
     for m in mappings:
         if all(m["values"].get(c, "") == values.get(c, "") for c in columns):
@@ -79,19 +100,14 @@ def is_eligible(source_id: str, config: dict) -> bool:
     return preprocessing_status(source_id, config) == COMPLETE
 
 
-def target_status(source_id: str, df, target: str, config: dict) -> str:
-    if not is_eligible(source_id, config):
-        return NOT_APPLICABLE
-    targets_config = config["tools"]["classification"]["targets"]
-    columns = present_columns(df, target, targets_config)
-    if not columns:
-        return NOT_APPLICABLE
-    combos = unique_combos(df, columns)
+def target_status(source_id: str, target: str, config: dict) -> str:
+    """For a source already known to be eligible — see source_status()."""
+    columns, combos = columns_and_combos(source_id, target, config)
     if not combos:
         return NOT_APPLICABLE
     sources_dir = config["repo_root"] / config["sources_dir"]
     classification_map_path = sources_dir / source_id / "classification_map.yaml"
-    mappings = load_yaml(classification_map_path).get(target, {}).get("mappings", [])
+    mappings = cached_yaml(classification_map_path).get(target, {}).get("mappings", [])
     if not mappings:
         return NOT_STARTED
     covered = sum(1 for combo in combos if find_mapping(mappings, columns, combo["values"]))
@@ -104,7 +120,7 @@ def review_markers(source_id: str, config: dict) -> dict:
     every source on the Prepare dashboard."""
     targets_config = config["tools"]["classification"]["targets"]
     sources_dir = config["repo_root"] / config["sources_dir"]
-    saved = load_yaml(sources_dir / source_id / "classification_map.yaml")
+    saved = cached_yaml(sources_dir / source_id / "classification_map.yaml")
     flag_counts = {flag: 0 for flag in REVIEW_FLAGS}
     for target in targets_config:
         for mapping in saved.get(target, {}).get("mappings", []):
@@ -121,8 +137,7 @@ def source_status(source_id: str, config: dict) -> dict:
     path = preprocessed_path(source_id, config)
     if not path.exists() or not is_eligible(source_id, config):
         return {"has_preprocessed_data": False, "targets": {name: NOT_APPLICABLE for name in targets_config}}
-    df = gpd.read_parquet(path)
     return {
         "has_preprocessed_data": True,
-        "targets": {name: target_status(source_id, df, name, config) for name in targets_config},
+        "targets": {name: target_status(source_id, name, config) for name in targets_config},
     }

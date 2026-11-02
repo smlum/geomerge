@@ -20,9 +20,21 @@
 
 table {
   width: 100%;
-  min-width: 700px;
+  min-width: 1100px;
   border-collapse: collapse;
   background: var(--color-panel-bg);
+}
+
+/* Fixed column widths (see the template's colgroup; Source takes what's left)
+   so the header doesn't shift as rows and statuses arrive. rows-pending hides
+   the footer cap until there are rows to sit under, since it would otherwise
+   draw right below the header and then jump down. */
+#rows {
+  table-layout: fixed;
+}
+
+#rows.rows-pending tfoot {
+  visibility: hidden;
 }
 
 th, td {

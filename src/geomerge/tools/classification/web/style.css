@@ -11,6 +11,37 @@
   font-size: 0.8rem;
 }
 
+/* The table is this page's workspace, and it's used on laptop screens, so the
+   chrome around it runs tighter than the shared shell's defaults. */
+body {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.geomerge-nav {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  margin: -1.5rem -1rem 0.75rem;
+}
+
+.geomerge-footer {
+  margin: 0.5rem -1rem -4rem;
+  padding: 0 1rem;
+}
+
+header {
+  align-items: stretch;
+  margin-bottom: 0.6rem;
+}
+
+.title-block {
+  flex-shrink: 0;
+}
+
+.back-link {
+  align-self: flex-start;
+}
+
 /* --- Target tabs --------------------------------------------------------
    One tab per classification target (canbics_class, status, surface_type,
    snow_removal), each carrying its own rolled-up status badge so all four
@@ -20,7 +51,7 @@
 .target-tabs {
   display: flex;
   gap: 0.4rem;
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.5rem;
   flex-wrap: wrap;
 }
 
@@ -28,7 +59,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.45rem 0.85rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 8px;
   border: 1px solid var(--color-border);
   background: var(--color-panel-bg);
@@ -57,26 +88,27 @@
   padding: 0.75rem 0;
 }
 
-.target-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  margin-bottom: 0.75rem;
-}
-
+/* Beside the title block, filling its height, so a note costs the table no
+   vertical space. */
 .source-notes {
-  margin-bottom: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 200px;
+  gap: 0.2rem;
 }
 
-.source-notes .field-label,
+.source-notes textarea {
+  flex: 1;
+  min-height: 0;
+}
+
 #flag-modal .field-label {
   display: block;
   margin-bottom: 0.25rem;
   font-size: 0.8rem;
 }
 
-/* resize: none, since dragging the source note taller would push the table
-   down without re-measuring .table-scroll's max-height. */
 textarea {
   display: block;
   box-sizing: border-box;
@@ -91,15 +123,9 @@ textarea {
   resize: none;
 }
 
-.flag-filter {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  cursor: pointer;
-}
-
 .flag-btn {
   max-width: 100%;
+  padding: 0.2rem 0.45rem;
   font-size: 0.78rem;
   white-space: nowrap;
 }
@@ -132,12 +158,12 @@ textarea {
 
 .prior-year-pill {
   display: inline-block;
-  padding: 0.15rem 0.5rem;
+  padding: 0.1rem 0.4rem;
   border: 1px solid var(--ctp-blue);
   border-radius: 999px;
   color: var(--ctp-blue);
   background: color-mix(in srgb, var(--ctp-blue) 12%, var(--color-panel-bg));
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -154,8 +180,8 @@ a.prior-year-pill:hover {
    a long one (e.g. canbics_class) while letting a short one shrink to fit.
 
    The two reserved terms below are what's rendered *below* table-scroll,
-   each measured directly rather than guessed: 3rem for .save-row (1rem
-   margin-top + its ~2rem button), 4.5rem for .geomerge-footer (1.5rem
+   each measured directly rather than guessed: 2.5rem for .save-row (0.5rem
+   margin-top + its ~2rem button), 3.5rem for .geomerge-footer (0.5rem
    margin-top + its 3rem height). Both need reserving — this table-scroll
    sits in normal flow, but .geomerge-footer is position: sticky and pins to
    the viewport bottom regardless, so if the page overflows one viewport at
@@ -164,12 +190,12 @@ a.prior-year-pill:hover {
    than just leaving a tight gap. */
 .table-scroll {
   overflow: auto;
-  max-height: calc(100vh - var(--header-height, 100px) - 3rem - 4.5rem);
+  max-height: calc(100vh - var(--header-height, 100px) - 2.5rem - 3.5rem);
 }
 
 table {
   width: 100%;
-  min-width: 700px;
+  min-width: 900px;
   table-layout: fixed;
   border-collapse: collapse;
   background: var(--color-panel-bg);
@@ -177,13 +203,19 @@ table {
 
 th, td {
   text-align: left;
-  padding: 0.5rem 0.75rem;
+  padding: 0.25rem 0.5rem;
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Raw values are what's being judged, so they wrap instead of truncating. */
+.value-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 th {
@@ -218,11 +250,17 @@ input[type="text"] {
    left instead. */
 .save-row {
   justify-content: flex-start;
+  margin-top: 0.5rem;
+}
+
+#save-next-btn {
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
 }
 
 #save-back-btn {
-  padding: 0.45rem 1.1rem;
-  font-size: 0.9rem;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
   font-weight: 600;
   border-radius: 6px;
   border: 1px solid var(--ctp-mauve);
@@ -243,6 +281,8 @@ input[type="text"] {
 }
 
 .sv-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
@@ -441,15 +481,22 @@ input[type="text"] {
 .target-field {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
+}
+
+.target-field select,
+.target-field input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.3rem;
 }
 
 .skip-toggle {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.3rem;
-  font-size: 0.75rem;
+  gap: 0.2rem;
+  font-size: 0.72rem;
   color: var(--color-text-secondary);
   cursor: pointer;
   white-space: nowrap;

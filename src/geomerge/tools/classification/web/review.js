@@ -272,14 +272,6 @@ async function openStreetView(target, group) {
   renderPoints(body, cached.points, regenerate);
 }
 
-// --- Prior-year dictionary modal ------------------------------------------
-// Read-only reference material (see prior_year.py) — a prior classification
-// effort's own source_class -> canbics_class decisions for this source's
-// municipality. Fetched once per page load and cached, since it can't
-// change while the page is open (nothing here writes anything).
-
-let priorYearRowsCache = null;
-
 // Generic display text — geomerge itself is domain-agnostic, and not every
 // project classifying against a prior vintage will call it a year, so the
 // bare noun is the default and the config-supplied label (e.g. "2024") is
@@ -287,60 +279,6 @@ let priorYearRowsCache = null;
 function priorYearLabel() {
   const label = appConfig.prior_year_dictionary_label;
   return label ? `Previous (${label})` : "Previous";
-}
-
-function closePriorYearModal() {
-  document.getElementById("prior-year-modal").classList.add("hidden");
-}
-
-async function openPriorYearModal() {
-  document.getElementById("prior-year-title").textContent = priorYearLabel();
-  const body = document.getElementById("prior-year-body");
-  body.textContent = "Loading…";
-  document.getElementById("prior-year-modal").classList.remove("hidden");
-
-  if (priorYearRowsCache === null) {
-    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}/prior_year_dictionary`);
-    const data = await res.json();
-    priorYearRowsCache = data.rows || [];
-  }
-
-  if (!priorYearRowsCache.length) {
-    body.textContent = "No prior data found for this source's municipality.";
-    return;
-  }
-
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  thead.innerHTML = "<tr><th>source_class</th><th>canbics_class</th><th></th></tr>";
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  for (const row of priorYearRowsCache) {
-    const tr = document.createElement("tr");
-    const classTd = document.createElement("td");
-    classTd.textContent = row.source_class || "(blank)";
-    const canbicsTd = document.createElement("td");
-    canbicsTd.textContent = row.canbics_class || "(blank)";
-    const linkTd = document.createElement("td");
-    if (row.street_view_url) {
-      const link = document.createElement("a");
-      link.href = row.street_view_url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = "Street View ↗";
-      linkTd.appendChild(link);
-    }
-    tr.append(classTd, canbicsTd, linkTd);
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-
-  body.innerHTML = "";
-  const wrap = document.createElement("div");
-  wrap.className = "table-scroll";
-  wrap.appendChild(table);
-  body.appendChild(wrap);
 }
 
 // --- Flag & note modal ------------------------------------------------------
@@ -393,7 +331,6 @@ function closeFlagModal() {
   ref.notes = document.getElementById("flag-modal-notes").value.trim();
   document.getElementById("flag-modal").classList.add("hidden");
   updateFlagButton(ref);
-  updateFlagFilter(ref.target);
 }
 
 // --- Group rows ---------------------------------------------------------
@@ -415,7 +352,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
 
   for (const col of columns) {
     const td = document.createElement("td");
-    td.className = "meta";
+    td.className = "meta value-cell";
     const v = group.values[col] ?? "";
     td.textContent = v === "" ? "(blank)" : v;
     td.title = v;
@@ -482,7 +419,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
   filterOutCheckbox.checked = isFilteredOut;
   filterOutLabel.append(filterOutCheckbox, " Filter out");
   filterOutLabel.title = "Drop this row from the dataset entirely";
-  targetTd.appendChild(filterOutLabel);
+  fieldWrap.appendChild(filterOutLabel);
 
   const ignoreLabel = document.createElement("label");
   ignoreLabel.className = "skip-toggle";
@@ -491,7 +428,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
   ignoreCheckbox.checked = isIgnored;
   ignoreLabel.append(ignoreCheckbox, " Ignore");
   ignoreLabel.title = "Leave this target blank for this row, but keep the row";
-  targetTd.appendChild(ignoreLabel);
+  fieldWrap.appendChild(ignoreLabel);
 
   filterOutCheckbox.addEventListener("change", () => {
     if (filterOutCheckbox.checked) ignoreCheckbox.checked = false;
@@ -525,7 +462,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
   if (streetViewEnabled) {
     const svTd = document.createElement("td");
     const svBtn = document.createElement("button");
-    svBtn.textContent = "Street View";
+    svBtn.textContent = "View";
     svBtn.className = "sv-btn";
     svBtn.addEventListener("click", () => openStreetView(target, group));
     svTd.appendChild(svBtn);
@@ -533,7 +470,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
   }
 
   const ref = {
-    target, tr, group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod,
+    group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod,
     flag: group.flag || "", notes: group.notes || "",
   };
 
@@ -551,7 +488,7 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
 // --- Target sections (one per tab) --------------------------------------
 
 const targetDataByName = {}; // target -> targetData, kept for tab status recompute after a save
-const targetRowRefs = {}; // target -> [{target, tr, group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod, flag, notes, flagBtn}], read by saveTarget()
+const targetRowRefs = {}; // target -> [{group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod, flag, notes, flagBtn}], read by saveTarget()
 
 // not_applicable: no source columns configured/present, or no value combos
 // at all. not_started: nothing saved yet. complete: every combo has a saved
@@ -565,16 +502,6 @@ function computeTargetStatus(targetData) {
   const covered = targetData.groups.filter((g) => g.confidence === "saved").length;
   if (covered === 0) return "not_started";
   return covered === targetData.groups.length ? "complete" : "needs_review";
-}
-
-// Re-applies the tab's "Flagged only" checkbox and refreshes its count — for
-// after any change to a row's flag, as well as the checkbox itself.
-function updateFlagFilter(target) {
-  const section = document.querySelector(`.target-section[data-target="${target}"]`);
-  const refs = targetRowRefs[target] || [];
-  const flaggedOnly = section.querySelector(".flag-filter input").checked;
-  for (const ref of refs) ref.tr.hidden = flaggedOnly && !ref.flag;
-  section.querySelector(".flag-filter-count").textContent = `(${refs.filter((ref) => ref.flag).length})`;
 }
 
 function updateTabStatus(target) {
@@ -599,52 +526,32 @@ function renderTargetSection(target, targetData) {
     return section;
   }
 
-  const toolbar = document.createElement("div");
-  toolbar.className = "target-toolbar";
-  if (targetData.show_prior_year) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = priorYearLabel();
-    btn.addEventListener("click", openPriorYearModal);
-    toolbar.appendChild(btn);
-  }
-  const flagFilter = document.createElement("label");
-  flagFilter.className = "flag-filter meta";
-  const flagFilterCheckbox = document.createElement("input");
-  flagFilterCheckbox.type = "checkbox";
-  flagFilterCheckbox.addEventListener("change", () => updateFlagFilter(target));
-  const flagFilterCount = document.createElement("span");
-  flagFilterCount.className = "flag-filter-count";
-  flagFilter.append(flagFilterCheckbox, "Flagged only", flagFilterCount);
-  toolbar.appendChild(flagFilter);
-  section.appendChild(toolbar);
-
   const columns = targetData.source_columns;
   const table = document.createElement("table");
 
   const colgroup = document.createElement("colgroup");
+  // No width on the raw value columns: they share whatever the fixed ones
+  // below leave, and long values wrap rather than forcing a side-scroll.
   for (const _ of columns) {
-    const col = document.createElement("col");
-    col.style.width = "200px";
-    colgroup.appendChild(col);
+    colgroup.appendChild(document.createElement("col"));
   }
-  for (const width of ["70px", "260px"]) {
+  for (const width of ["70px", "345px"]) {
     const col = document.createElement("col");
     col.style.width = width;
     colgroup.appendChild(col);
   }
   if (targetData.show_prior_year) {
     const col = document.createElement("col");
-    col.style.width = "130px";
+    col.style.width = "165px";
     colgroup.appendChild(col);
   }
   if (targetData.street_view) {
     const col = document.createElement("col");
-    col.style.width = "110px";
+    col.style.width = "100px";
     colgroup.appendChild(col);
   }
   const flagCol = document.createElement("col");
-  flagCol.style.width = "110px";
+  flagCol.style.width = "95px";
   colgroup.appendChild(flagCol);
   table.appendChild(colgroup);
 
@@ -652,6 +559,7 @@ function renderTargetSection(target, targetData) {
   const headRow = document.createElement("tr");
   for (const col of columns) {
     const th = document.createElement("th");
+    th.className = "value-cell";
     th.textContent = col;
     headRow.appendChild(th);
   }
@@ -962,7 +870,6 @@ async function load() {
   for (const target of allTargetNames) {
     targetDataByName[target] = data.targets[target];
     container.appendChild(renderTargetSection(target, data.targets[target]));
-    if (data.targets[target].source_columns.length) updateFlagFilter(target);
   }
 
   savedSourceNotes = data.source_notes || "";

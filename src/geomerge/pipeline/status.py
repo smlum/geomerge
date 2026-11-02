@@ -5,14 +5,9 @@ disk, for geomerge serve's dashboard."""
 
 from pathlib import Path
 
-import yaml
-
 from geomerge.helpers.config import stage_output_dir
+from geomerge.helpers.file_cache import cached_yaml
 from geomerge.helpers.status import COMPLETE, NOT_BUILT, STALE
-
-
-def load_yaml(path: Path) -> dict:
-    return yaml.safe_load(path.read_text()) or {} if path.exists() else {}
 
 
 def _mtime(path: Path):
@@ -33,7 +28,7 @@ def preprocessing_status(source_id: str, config: dict) -> str:
         return NOT_BUILT
 
     source_dir = repo_root / config["sources_dir"] / source_id
-    metadata = load_yaml(source_dir / "metadata.yaml")
+    metadata = cached_yaml(source_dir / "metadata.yaml")
     raw_filename = metadata.get("raw_filename")
     inputs = [source_dir / "column_map.yaml"]
     if raw_filename:

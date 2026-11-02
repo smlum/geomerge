@@ -19,6 +19,10 @@
       <a id="rules-edit-link" class="link-btn" href="/setup/classification_matching_rules.html">Edit</a>
     </div>
   </div>
+  <div id="source-notes-wrap" class="source-notes hidden">
+    <label class="meta field-label" for="source-notes">Source notes</label>
+    <textarea id="source-notes" placeholder="Anything to follow up on for this source, e.g. contact the municipality"></textarea>
+  </div>
   <a href="/prep/" class="back-link">&larr; Back</a>
 {% endblock %}
 
@@ -26,10 +30,6 @@
   <div id="error" class="error hidden"></div>
 
   <div class="content-area">
-    <div id="source-notes-wrap" class="source-notes hidden">
-      <label class="field-label" for="source-notes">Source notes</label>
-      <textarea id="source-notes" rows="2" placeholder="Anything to follow up on for this source, e.g. contact the municipality"></textarea>
-    </div>
     <div id="target-tabs" class="target-tabs"></div>
     <div id="targets"></div>
 
@@ -67,19 +67,6 @@
     </div>
   </div>
 
-  <div id="prior-year-modal" class="modal-overlay hidden">
-    <div class="modal-panel">
-      <div class="modal-header">
-        <div class="modal-title-block">
-          <h2 id="prior-year-title"></h2>
-          <div class="meta">Prior classification for this municipality — reference only, not applied automatically.</div>
-        </div>
-        <button id="prior-year-close" class="modal-close" type="button">&times;</button>
-      </div>
-      <div id="prior-year-body"></div>
-    </div>
-  </div>
-
   <div id="flag-modal" class="modal-overlay hidden">
     <div class="modal-panel">
       <div class="modal-header">
@@ -109,10 +96,6 @@
     document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
     document.getElementById("file-preview-modal").addEventListener("click", (e) => {
       if (e.target.id === "file-preview-modal") closeFilePreview();
-    });
-    document.getElementById("prior-year-close").addEventListener("click", closePriorYearModal);
-    document.getElementById("prior-year-modal").addEventListener("click", (e) => {
-      if (e.target.id === "prior-year-modal") closePriorYearModal();
     });
     document.getElementById("flag-modal-close").addEventListener("click", closeFlagModal);
     document.getElementById("flag-modal-done").addEventListener("click", closeFlagModal);

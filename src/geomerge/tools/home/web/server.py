@@ -144,6 +144,12 @@ def create_app(config: dict = None) -> Flask:
     def index():
         return render_template("index.html", active_tab="home", include_source_card=True)
 
+    # Just the rows, so home's and prep's tables can draw immediately and fill
+    # in the slower statuses from their own /api/sources afterwards.
+    @app.route("/api/source_ids")
+    def api_source_ids():
+        return jsonify(source_ids())
+
     @app.route("/api/sources")
     def api_sources():
         return jsonify([source_row(source_id) for source_id in source_ids()])

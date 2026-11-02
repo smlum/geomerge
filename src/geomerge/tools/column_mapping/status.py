@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from geomerge.helpers.file_cache import cached_yaml
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_STARTED
 from geomerge.tools.column_mapping.inspect_raw import raw_column_names
 
@@ -42,7 +43,7 @@ def source_status(source_id: str, config: dict) -> dict:
     raw_dir = repo_root / config["raw_dir"]
 
     source_dir = sources_dir / source_id
-    metadata = load_yaml(source_dir / "metadata.yaml")
+    metadata = cached_yaml(source_dir / "metadata.yaml")
     has_metadata = bool(metadata)
 
     raw_filename = metadata.get("raw_filename") or None
@@ -56,7 +57,7 @@ def source_status(source_id: str, config: dict) -> dict:
     status = NOT_STARTED
     flagged = False
     if has_column_map:
-        column_map = load_yaml(column_map_path)
+        column_map = cached_yaml(column_map_path)
         flagged = bool(column_map.get("flagged", False))
         accounted = set(column_map.get("column_map", {})) | set(column_map.get("dropped", []))
         if flagged:

@@ -3,7 +3,7 @@
    home/pipeline/validate/collection) — this file only keeps this
    dashboard's own table shape, which deliberately isn't shared (see
    page-shell.css's comment): a real height (not max-height) on
-   .table-scroll, table-layout: auto with sticky on the whole <thead>
+   .table-scroll, table-layout: fixed with sticky on the whole <thead>
    rather than per-<th>. */
 
 /* A fixed height, not max-height: needs to fill the remaining viewport even
@@ -20,9 +20,21 @@
 
 table {
   width: 100%;
-  min-width: 500px;
+  min-width: 1050px;
   border-collapse: collapse;
   background: var(--color-panel-bg);
+}
+
+/* Fixed column widths (see the template's colgroup; Source takes what's left)
+   so the header doesn't shift as rows and statuses arrive. rows-pending hides
+   the footer cap until there are rows to sit under, since it would otherwise
+   draw right below the header and then jump down. */
+#rows {
+  table-layout: fixed;
+}
+
+#rows.rows-pending tfoot {
+  visibility: hidden;
 }
 
 th, td {

@@ -167,18 +167,37 @@ function isRowComplete(s) {
   return statuses.every((st) => st === "complete" || st === "not_applicable");
 }
 
-function renderRow(s) {
+// A row before its statuses arrive — same name cell, placeholder pills.
+function renderLoadingRow(sourceId) {
   const tr = document.createElement("tr");
+  tr.appendChild(nameCell(sourceId));
+  for (let i = 0; i < 7; i++) {
+    const td = document.createElement("td");
+    if (i === 0 || i === 2 || i === 5) td.classList.add("group-boundary"); // same columns as renderRow
+    const badge = document.createElement("span");
+    badge.className = "status status-loading";
+    badge.textContent = "…";
+    td.appendChild(badge);
+    tr.appendChild(td);
+  }
+  return tr;
+}
 
+function nameCell(sourceId) {
   const nameTd = document.createElement("td");
   nameTd.className = "name";
   const nameBtn = document.createElement("button");
   nameBtn.type = "button";
   nameBtn.className = "source-card-trigger";
-  nameBtn.textContent = s.source_id;
-  nameBtn.addEventListener("click", () => openSourceCard(s.source_id));
+  nameBtn.textContent = sourceId;
+  nameBtn.addEventListener("click", () => openSourceCard(sourceId));
   nameTd.appendChild(nameBtn);
-  tr.appendChild(nameTd);
+  return nameTd;
+}
+
+function renderRow(s) {
+  const tr = document.createElement("tr");
+  tr.appendChild(nameCell(s.source_id));
 
   // collection/ — metadata opens a read-only preview modal (see
   // yamlPreviewCell); raw is just a badge for whether the file showed up on
@@ -223,8 +242,20 @@ window.addEventListener("resize", updateStickyOffsets);
 updateStickyOffsets();
 
 let sources = [];
+let sourceIds = [];
+let statusesLoaded = false;
+
+function renderLoadingRows() {
+  document.getElementById("rows").classList.remove("rows-pending");
+  const body = document.getElementById("rows-body");
+  body.innerHTML = "";
+  for (const sourceId of sourceIds) {
+    body.appendChild(renderLoadingRow(sourceId));
+  }
+}
 
 function render() {
+  document.getElementById("rows").classList.remove("rows-pending");
   const filterMode = document.getElementById("filter-mode").value;
   let visible = sources;
   if (filterMode === "complete") {
@@ -247,18 +278,30 @@ function render() {
   document.getElementById("summary").textContent = `${completeCount} / ${sources.length} sources complete`;
 }
 
-// /api/sources recomputes every source's status from scratch on every call
-// (no caching yet) — with real source counts that's several seconds, and an
-// empty table body during that wait looks identical to "there's just
-// nothing here" or a frozen page, not "still loading". This is the whole
-// fix for that: an explicit row + footer text the instant load() starts,
-// not just once data arrives.
+// Statuses usually arrive within a few frames, so the table waits briefly and
+// draws once, in its final form. Only if they take longer (the first load
+// after a server restart, before the status helpers' file caches have warmed
+// up) do rows appear early with placeholder pills. Filters and the footer's
+// counts need statuses, so they apply once those arrive.
+const PLACEHOLDER_DELAY_MS = 200;
+
 async function load() {
-  document.getElementById("rows-body").innerHTML = '<tr><td colspan="8" class="meta">Loading…</td></tr>';
-  document.getElementById("summary").textContent = "Loading…";
-  const res = await fetch("api/sources");
-  sources = await res.json();
-  render();
+  const footer = document.getElementById("summary");
+  footer.textContent = "Loading statuses…";
+  try {
+    const idsRes = await fetch("/api/source_ids");
+    sourceIds = await idsRes.json();
+    statusesLoaded = false;
+    const placeholderTimer = setTimeout(renderLoadingRows, PLACEHOLDER_DELAY_MS);
+
+    const res = await fetch("api/sources");
+    sources = await res.json();
+    clearTimeout(placeholderTimer);
+    statusesLoaded = true;
+    render();
+  } catch (e) {
+    footer.textContent = `Failed to load statuses: ${e}`;
+  }
 }
 
 document.getElementById("refresh-btn").addEventListener("click", load);
@@ -268,7 +311,7 @@ const savedFilter = localStorage.getItem("home-filter-mode");
 if (savedFilter) filterSelect.value = savedFilter;
 filterSelect.addEventListener("change", () => {
   localStorage.setItem("home-filter-mode", filterSelect.value);
-  render();
+  if (statusesLoaded) render();
 });
 
 load();
