@@ -3,7 +3,7 @@
    home/prep/validate/collection) — this file only keeps this dashboard's
    own table shape, which deliberately isn't shared (see page-shell.css's
    comment): a real height (not max-height) on .table-scroll, table-layout:
-   auto with sticky on the whole <thead> rather than per-<th>. */
+   fixed with sticky on the whole <thead> rather than per-<th>. */
 
 /* A fixed height, not max-height: needs to fill the remaining viewport even
    before any rows have loaded (an empty tbody would otherwise shrink it to

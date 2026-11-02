@@ -140,10 +140,8 @@ h1 {
 
 /* table/th/td and .table-scroll's own sizing deliberately aren't shared
    here, even though both page shapes look similar at a glance: the two
-   per-source review pages use table-layout: fixed with an explicit colgroup,
-   stick each <th> individually, and cap .table-scroll with max-height; the
-   dashboards use auto layout (content-sized columns, no colgroup), stick the
-   whole <thead> instead — a deliberate Safari-only compositing-bug
+   per-source review pages stick each <th> individually and cap .table-scroll
+   with max-height; the dashboards stick the whole <thead> instead — a deliberate Safari-only compositing-bug
    workaround (see e.g. pipeline/style.css) that per-th stickiness would
    silently reintroduce — and give .table-scroll a real height, not
    max-height (needs to fill the viewport even before any rows load). Each

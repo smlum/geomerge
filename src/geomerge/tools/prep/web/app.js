@@ -81,21 +81,6 @@ function isRowComplete(s) {
   );
 }
 
-// A row before its statuses arrive — same name cell, placeholder pills.
-function renderLoadingRow(sourceId) {
-  const tr = document.createElement("tr");
-  tr.appendChild(nameCell(sourceId));
-  for (let i = 0; i < 3; i++) {
-    const td = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = "status status-loading";
-    badge.textContent = "…";
-    td.appendChild(badge);
-    tr.appendChild(td);
-  }
-  return tr;
-}
-
 function nameCell(sourceId) {
   const nameTd = document.createElement("td");
   nameTd.className = "name";
@@ -136,21 +121,9 @@ function updateStickyOffsets() {
 window.addEventListener("resize", updateStickyOffsets);
 updateStickyOffsets();
 
-let sources = [];
-let sourceIds = [];
-let statusesLoaded = false;
-
-function renderLoadingRows() {
-  document.getElementById("rows").classList.remove("rows-pending");
-  const body = document.getElementById("rows-body");
-  body.innerHTML = "";
-  for (const sourceId of sourceIds) {
-    body.appendChild(renderLoadingRow(sourceId));
-  }
-}
+let sources = null; // null until statuses have loaded
 
 function render() {
-  document.getElementById("rows").classList.remove("rows-pending");
   const filterMode = document.getElementById("filter-mode").value;
   let visible = sources;
   if (filterMode === "complete") {
@@ -185,30 +158,17 @@ function render() {
     `${mappedCount} / ${sources.length} mapped · ${classifiedCount} / ${sources.length} classified · ${flaggedCount} flagged`;
 }
 
-// Statuses usually arrive within a few frames, so the table waits briefly and
-// draws once, in its final form. Only if they take longer (the first load
-// after a server restart, before the status helpers' file caches have warmed
-// up) do rows appear early with placeholder pills. Filters and the footer's
-// counts need statuses, so they apply once those arrive.
-const PLACEHOLDER_DELAY_MS = 200;
-
 async function load() {
-  const footer = document.getElementById("progress");
-  footer.textContent = "Loading statuses…";
-  try {
-    const idsRes = await fetch("/api/source_ids");
-    sourceIds = await idsRes.json();
-    statusesLoaded = false;
-    const placeholderTimer = setTimeout(renderLoadingRows, PLACEHOLDER_DELAY_MS);
-
-    const res = await fetch("api/sources");
-    sources = await res.json();
-    clearTimeout(placeholderTimer);
-    statusesLoaded = true;
-    render();
-  } catch (e) {
-    footer.textContent = `Failed to load statuses: ${e}`;
-  }
+  sources = null;
+  await loadStatusTable({
+    footerId: "progress",
+    nameCell,
+    statusColumns: 3,
+    onLoaded: (data) => {
+      sources = data;
+      render();
+    },
+  });
 }
 
 document.getElementById("refresh-btn").addEventListener("click", load);
@@ -218,7 +178,7 @@ const savedFilter = localStorage.getItem("prep-filter-mode");
 if (savedFilter) filterSelect.value = savedFilter;
 filterSelect.addEventListener("change", () => {
   localStorage.setItem("prep-filter-mode", filterSelect.value);
-  if (statusesLoaded) render();
+  if (sources) render();
 });
 
 load();

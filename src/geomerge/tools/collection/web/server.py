@@ -19,6 +19,7 @@ import yaml
 from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config, stage_output_dir
+from geomerge.helpers.file_cache import cached_yaml
 from geomerge.helpers.status import COMPLETE, MISSING, NONE, PARTIAL
 
 
@@ -82,7 +83,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
         return yaml.safe_load(schema_yaml.read_text())
 
     def required_fields() -> list:
-        return [f["name"] for f in load_schema()["fields"] if f.get("required")]
+        return [f["name"] for f in cached_yaml(schema_yaml)["fields"] if f.get("required")]
 
     def format_options() -> list:
         for f in load_schema()["fields"]:
@@ -145,7 +146,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
             if not yaml_path.exists():
                 statuses.append(MISSING)
                 continue
-            data = yaml.safe_load(yaml_path.read_text()) or {}
+            data = cached_yaml(yaml_path)
             statuses.append(COMPLETE if all(str(data.get(f, "")).strip() for f in req) else PARTIAL)
         if all(s == COMPLETE for s in statuses):
             return COMPLETE
@@ -168,7 +169,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
             yaml_path = yaml_path_for(source_id)
             if not yaml_path.exists():
                 return MISSING
-            data = yaml.safe_load(yaml_path.read_text()) or {}
+            data = cached_yaml(yaml_path)
             raw_filename = data.get("raw_filename")
             if not raw_filename or not (raw_dir / source_id / raw_filename).exists():
                 return MISSING

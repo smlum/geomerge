@@ -17,10 +17,16 @@ async function loadMeta() {
 }
 
 async function loadRows() {
-  document.getElementById("rows-body").innerHTML = '<tr><td colspan="8" class="meta">Loading…</td></tr>';
-  document.getElementById("progress").textContent = "Loading…";
-  const res = await fetch("api/rows");
-  rows = await res.json();
+  const footer = document.getElementById("progress");
+  footer.textContent = "Loading…";
+  try {
+    const res = await fetch("api/rows");
+    rows = await res.json();
+  } catch (e) {
+    footer.textContent = `Failed to load rows: ${e}`;
+    throw e;
+  }
+  document.getElementById("rows").classList.remove("rows-pending");
   render();
 }
 

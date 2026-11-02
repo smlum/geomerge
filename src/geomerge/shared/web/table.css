@@ -12,6 +12,19 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+/* Every page's main table (id="rows") lays out from its colgroup rather than
+   its contents, so columns don't shift as rows arrive. Needs a width on the
+   table to take effect, which each tool's own style.css sets. rows-pending
+   hides the footer cap until there are rows to sit under, since it would
+   otherwise draw right below the header and then jump down. */
+#rows {
+  table-layout: fixed;
+}
+
+#rows.rows-pending tfoot {
+  visibility: hidden;
+}
+
 tfoot td {
   height: 0.75rem;
   padding: 0;

@@ -33,6 +33,7 @@
 }
 
 table {
+  width: 100%;
   min-width: 900px;
   table-layout: fixed;
   border-collapse: collapse;
