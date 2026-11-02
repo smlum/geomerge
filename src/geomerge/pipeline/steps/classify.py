@@ -15,7 +15,7 @@ one every published segment must have.
 
 import yaml
 
-from geomerge.helpers.constants import NOT_INCLUDED
+from geomerge.helpers.constants import IGNORED, NOT_INCLUDED
 
 
 def _stringify(value) -> str:
@@ -71,6 +71,12 @@ def apply(data, *, source_id: str, config: dict):
 
         target_excluded = data[target] == NOT_INCLUDED
         excluded = target_excluded if excluded is None else (excluded | target_excluded)
+
+        # Unlike NOT_INCLUDED above, an IGNORED row keeps its place in the
+        # dataset — it just has no value for this one target. Converted to a
+        # real blank now, after the exclusion check, so the sentinel string
+        # itself never reaches the merged output.
+        data.loc[data[target] == IGNORED, target] = None
 
     if excluded is not None and excluded.any():
         n_excluded = int(excluded.sum())

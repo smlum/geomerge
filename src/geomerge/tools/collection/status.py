@@ -4,6 +4,7 @@ in its table."""
 
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 from geomerge.helpers.status import COMPLETE, MISSING, PARTIAL
@@ -40,3 +41,24 @@ def source_raw_data_status(source_id: str, config: dict) -> str:
         return MISSING
     raw_path = repo_root / config["raw_dir"] / source_id / raw_filename
     return COMPLETE if raw_path.exists() else MISSING
+
+
+def source_flagged(source_id: str, config: dict) -> bool:
+    """Is this source's checklist.csv row flagged? checklist.csv is keyed
+    per-provider, not per-source, so this joins via metadata.yaml's
+    provider_id rather than source_id directly."""
+    repo_root = config["repo_root"]
+    metadata_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
+    if not metadata_path.exists():
+        return False
+    metadata = yaml.safe_load(metadata_path.read_text()) or {}
+    provider_id = metadata.get("provider_id")
+    if not provider_id:
+        return False
+
+    checklist_path = repo_root / config["sources_dir"] / "checklist.csv"
+    if not checklist_path.exists():
+        return False
+    checklist = pd.read_csv(checklist_path, dtype=str).fillna("")
+    row = checklist[checklist["provider_id"] == provider_id]
+    return bool(len(row)) and row.iloc[0]["flagged"] == "x"

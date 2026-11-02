@@ -124,11 +124,14 @@ function render() {
   const classifiedCount = sources.filter(
     (s) => s.classification === "complete" || s.classification === "not_applicable"
   ).length;
-  // "flagged on either map or classify" — classification has no flag
-  // feature yet (column_mapping_flagged is the only real signal today), but
-  // OR-ing against classification_flagged now means adding one later just
-  // works, no rework needed here.
-  const flaggedCount = sources.filter((s) => s.column_mapping_flagged || s.classification_flagged).length;
+  // "flagged at collection, column mapping, or classify" — classification
+  // has no flag feature of its own yet (column_mapping_flagged and
+  // collection_flagged are the only real signals today), but OR-ing against
+  // classification_flagged now means adding one later just works, no
+  // rework needed here.
+  const flaggedCount = sources.filter(
+    (s) => s.column_mapping_flagged || s.collection_flagged || s.classification_flagged
+  ).length;
   document.getElementById("progress").textContent =
     `${mappedCount} / ${sources.length} mapped · ${classifiedCount} / ${sources.length} classified · ${flaggedCount} flagged`;
 }

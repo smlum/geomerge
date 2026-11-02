@@ -9,6 +9,9 @@ import yaml
 
 from geomerge.helpers.config import stage_output_dir
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_APPLICABLE, NOT_STARTED
+from geomerge.pipeline.status import preprocessing_status
+from geomerge.tools.collection.status import source_flagged as collection_flagged
+from geomerge.tools.column_mapping.status import source_status as column_mapping_status
 
 
 def load_yaml(path: Path) -> dict:
@@ -60,7 +63,24 @@ def preprocessed_path(source_id: str, config: dict) -> Path:
     return preprocessing_dir / source_id / f"{source_id}.parquet"
 
 
+def is_eligible(source_id: str, config: dict) -> bool:
+    """False if this source is flagged (at collection or column mapping) or
+    hasn't cleared column mapping / preprocessing yet — a source shouldn't
+    be classified until the data feeding it is settled. Flagging happens in
+    two disconnected places (checklist.csv's collection-stage flag, joined
+    via metadata.yaml's provider_id, and column_map.yaml's own flag), so
+    both are checked here rather than just one."""
+    cm = column_mapping_status(source_id, config)
+    if cm["flagged"] or collection_flagged(source_id, config):
+        return False
+    if cm["column_map_status"] != COMPLETE:
+        return False
+    return preprocessing_status(source_id, config) == COMPLETE
+
+
 def target_status(source_id: str, df, target: str, config: dict) -> str:
+    if not is_eligible(source_id, config):
+        return NOT_APPLICABLE
     targets_config = config["tools"]["classification"]["targets"]
     columns = present_columns(df, target, targets_config)
     if not columns:
@@ -79,10 +99,11 @@ def target_status(source_id: str, df, target: str, config: dict) -> str:
 
 def source_status(source_id: str, config: dict) -> dict:
     """Per-target statuses for one source — has_preprocessed_data: False (all
-    targets not_applicable) if it hasn't been through preprocessing yet."""
+    targets not_applicable) if it hasn't been through preprocessing yet, or
+    if the source isn't eligible for classification yet (see is_eligible)."""
     targets_config = config["tools"]["classification"]["targets"]
     path = preprocessed_path(source_id, config)
-    if not path.exists():
+    if not path.exists() or not is_eligible(source_id, config):
         return {"has_preprocessed_data": False, "targets": {name: NOT_APPLICABLE for name in targets_config}}
     df = gpd.read_parquet(path)
     return {

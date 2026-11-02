@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="/modal.css" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/hljs-theme.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" />
 {% endblock %}
 
 {% block header_content %}
@@ -30,6 +31,7 @@
 
     <div class="save-row">
       <div class="save-row-buttons">
+        <button id="save-btn" type="button">Save</button>
         <button id="save-next-btn">Save &amp; next &rarr;</button>
         <button id="save-back-btn" type="button">&larr; Save &amp; back to home</button>
       </div>
@@ -60,16 +62,34 @@
       <pre id="file-preview-content" class="code-block hljs"></pre>
     </div>
   </div>
+
+  <div id="prior-year-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2 id="prior-year-title"></h2>
+          <div class="meta">Prior classification for this municipality — reference only, not applied automatically.</div>
+        </div>
+        <button id="prior-year-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div id="prior-year-body"></div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
   <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
   <script src="/file-preview.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
   <script src="review.js"></script>
   <script>
     document.getElementById("file-preview-close").addEventListener("click", closeFilePreview);
     document.getElementById("file-preview-modal").addEventListener("click", (e) => {
       if (e.target.id === "file-preview-modal") closeFilePreview();
+    });
+    document.getElementById("prior-year-close").addEventListener("click", closePriorYearModal);
+    document.getElementById("prior-year-modal").addEventListener("click", (e) => {
+      if (e.target.id === "prior-year-modal") closePriorYearModal();
     });
   </script>
 {% endblock %}

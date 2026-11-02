@@ -24,11 +24,21 @@ def bearing(p1, p2) -> float:
     return (math.degrees(math.atan2(dx, dy)) + 360) % 360
 
 
+def _stringify(value) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return ""
+    return str(value)
+
+
 def sample_points(gdf: gpd.GeoDataFrame, n: int, seed: int = None) -> list:
     """Pick up to n random points along gdf's line geometry, weighted by
-    segment length. Each point gets a lat/lng (WGS84) and a facing heading
-    for a Street View camera. Returns [] if gdf is empty or has zero total
-    length (e.g. every row is a degenerate/empty geometry)."""
+    segment length. Each point gets a lat/lng (WGS84), a facing heading for
+    a Street View camera, and "values": every non-geometry column on the row
+    it was drawn from — not just whatever columns the caller filtered by, so
+    a reviewer can see e.g. a source_status the current target doesn't
+    group by, without this module knowing anything about classification.
+    Returns [] if gdf is empty or has zero total length (e.g. every row is a
+    degenerate/empty geometry)."""
     if gdf.empty:
         return []
 
@@ -38,6 +48,8 @@ def sample_points(gdf: gpd.GeoDataFrame, n: int, seed: int = None) -> list:
     total = lengths.sum()
     if total <= 0:
         return []
+
+    value_columns = [c for c in gdf.columns if c != gdf.geometry.name]
 
     rng = np.random.default_rng(seed)
     weights = lengths / total
@@ -56,5 +68,14 @@ def sample_points(gdf: gpd.GeoDataFrame, n: int, seed: int = None) -> list:
         point_wgs84 = (
             gpd.GeoSeries([point], crs=gdf.crs).to_crs("EPSG:4326").iloc[0] if to_wgs84 else point
         )
-        points.append({"lat": point_wgs84.y, "lng": point_wgs84.x, "heading": round(heading, 1)})
+        line_wgs84 = gpd.GeoSeries([line], crs=gdf.crs).to_crs("EPSG:4326").iloc[0]
+        row = gdf.iloc[row_pos]
+        values = {c: _stringify(row[c]) for c in value_columns}
+        points.append({
+            "lat": point_wgs84.y,
+            "lng": point_wgs84.x,
+            "heading": round(heading, 1),
+            "values": values,
+            "segment": line_wgs84.__geo_interface__,
+        })
     return points

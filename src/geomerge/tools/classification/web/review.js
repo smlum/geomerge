@@ -1,7 +1,10 @@
 const params = new URLSearchParams(location.search);
 const sourceId = params.get("id");
 
-let appConfig = { mock: true, maps_api_key: null, street_view_enabled: false, n_samples: 3, not_included_value: "not_included" };
+let appConfig = {
+  mock: true, maps_api_key: null, street_view_enabled: false, n_samples: 3,
+  not_included_value: "not_included", ignored_value: "ignored",
+};
 const sampleCache = new Map(); // key -> { points: [...], spare: [...] }
 let modalEl = null;
 let activeTarget = null;
@@ -73,6 +76,103 @@ function closeModal() {
   if (modalEl) modalEl.classList.add("hidden");
 }
 
+// A sampled point's own row data (see geo_sampling.py's sample_points()) —
+// not just the columns the current target happens to group by, so
+// source_status can surface a proposed/not-yet-built segment right where the
+// image is, while source_install_date can add useful context too.
+function renderSampleValues(point) {
+  const dl = document.createElement("dl");
+  dl.className = "sv-sample-values";
+  for (const [col, val] of Object.entries(point.values || {})) {
+    const dt = document.createElement("dt");
+    dt.textContent = col;
+    const dd = document.createElement("dd");
+    dd.textContent = val === "" ? "(blank)" : val;
+    dl.append(dt, dd);
+  }
+  return dl;
+}
+
+function renderSampleMap(point) {
+  const mapEl = document.createElement("div");
+  mapEl.className = "sv-point-map";
+
+  requestAnimationFrame(() => {
+    if (!window.maplibregl) {
+      mapEl.textContent = "Map unavailable — MapLibre did not load.";
+      return;
+    }
+
+    const map = new maplibregl.Map({
+      container: mapEl,
+      style: "https://tiles.openfreemap.org/styles/positron",
+      center: [point.lng, point.lat],
+      zoom: 15,
+      interactive: true,
+      cooperativeGestures: true,
+      attributionControl: { compact: true },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    map.on("load", () => {
+      map.addSource("sample-segment", {
+        type: "geojson",
+        data: { type: "Feature", geometry: point.segment, properties: {} },
+      });
+      const segmentLayer = {
+        id: "sample-segment",
+        type: "line",
+        source: "sample-segment",
+        paint: { "line-color": "#8839ef", "line-width": 5, "line-opacity": 0.85 },
+      };
+      const firstSymbolLayer = map.getStyle().layers.find((layer) => layer.type === "symbol");
+      map.addLayer(segmentLayer, firstSymbolLayer?.id);
+      map.addSource("sample-point", {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [point.lng, point.lat] },
+          properties: {},
+        },
+      });
+      map.addLayer({
+        id: "sample-point",
+        type: "circle",
+        source: "sample-point",
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#fe640b",
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+
+      const bounds = new maplibregl.LngLatBounds();
+      const extendBounds = (coordinates) => {
+        if (typeof coordinates[0] === "number") {
+          bounds.extend(coordinates);
+        } else {
+          coordinates.forEach(extendBounds);
+        }
+      };
+      extendBounds(point.segment.coordinates);
+      bounds.extend([point.lng, point.lat]);
+      map.fitBounds(bounds, { padding: 18, maxZoom: 17, duration: 0 });
+    });
+  });
+
+  return mapEl;
+}
+
+// The per-sample values + map — shared by both mock and live rendering
+// below, and re-rendered as a pair whenever the displayed sample changes.
+function renderSampleDetail(point) {
+  const wrap = document.createElement("div");
+  wrap.className = "sv-sample-detail";
+  wrap.append(renderSampleValues(point), renderSampleMap(point));
+  return wrap;
+}
+
 function renderPoints(container, points, onRegenerate) {
   container.innerHTML = "";
   if (!points.length) {
@@ -81,6 +181,7 @@ function renderPoints(container, points, onRegenerate) {
   }
 
   const mock = appConfig.mock || !appConfig.maps_api_key;
+  let detailEl = null; // live mode only — appended after regenBtn below, so it renders underneath it
 
   if (mock) {
     for (const [i, p] of points.entries()) {
@@ -92,6 +193,7 @@ function renderPoints(container, points, onRegenerate) {
       link.rel = "noopener";
       link.textContent = `Sample ${i + 1}`;
       row.appendChild(link);
+      row.appendChild(renderSampleDetail(p));
       container.appendChild(row);
     }
   } else {
@@ -116,10 +218,13 @@ function renderPoints(container, points, onRegenerate) {
         idx = (idx + 1) % points.length;
         iframe.src = embedUrl(points[idx]);
         label.textContent = `Sample ${idx + 1} / ${points.length}`;
+        detailEl.replaceWith(renderSampleDetail(points[idx]));
+        detailEl = container.querySelector(".sv-sample-detail");
       });
       nav.appendChild(next);
     }
     container.appendChild(nav);
+    detailEl = renderSampleDetail(points[idx]);
   }
 
   const regenBtn = document.createElement("button");
@@ -128,6 +233,10 @@ function renderPoints(container, points, onRegenerate) {
   regenBtn.title = "Get different sample points (e.g. if these are old or inconclusive)";
   regenBtn.addEventListener("click", onRegenerate);
   container.appendChild(regenBtn);
+
+  // Below the regen button, not above — mock mode already has its own copy
+  // of this per sample row (see the mock branch above), inline with each link.
+  if (detailEl) container.appendChild(detailEl);
 }
 
 async function openStreetView(target, group) {
@@ -163,18 +272,92 @@ async function openStreetView(target, group) {
   renderPoints(body, cached.points, regenerate);
 }
 
+// --- Prior-year dictionary modal ------------------------------------------
+// Read-only reference material (see prior_year.py) — a prior classification
+// effort's own source_class -> canbics_class decisions for this source's
+// municipality. Fetched once per page load and cached, since it can't
+// change while the page is open (nothing here writes anything).
+
+let priorYearRowsCache = null;
+
+// Generic display text — geomerge itself is domain-agnostic, and not every
+// project classifying against a prior vintage will call it a year, so the
+// bare noun is the default and the config-supplied label (e.g. "2024") is
+// just parenthetical when present.
+function priorYearLabel() {
+  const label = appConfig.prior_year_dictionary_label;
+  return label ? `Previous (${label})` : "Previous";
+}
+
+function closePriorYearModal() {
+  document.getElementById("prior-year-modal").classList.add("hidden");
+}
+
+async function openPriorYearModal() {
+  document.getElementById("prior-year-title").textContent = priorYearLabel();
+  const body = document.getElementById("prior-year-body");
+  body.textContent = "Loading…";
+  document.getElementById("prior-year-modal").classList.remove("hidden");
+
+  if (priorYearRowsCache === null) {
+    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}/prior_year_dictionary`);
+    const data = await res.json();
+    priorYearRowsCache = data.rows || [];
+  }
+
+  if (!priorYearRowsCache.length) {
+    body.textContent = "No prior data found for this source's municipality.";
+    return;
+  }
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  thead.innerHTML = "<tr><th>source_class</th><th>canbics_class</th><th></th></tr>";
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const row of priorYearRowsCache) {
+    const tr = document.createElement("tr");
+    const classTd = document.createElement("td");
+    classTd.textContent = row.source_class || "(blank)";
+    const canbicsTd = document.createElement("td");
+    canbicsTd.textContent = row.canbics_class || "(blank)";
+    const linkTd = document.createElement("td");
+    if (row.street_view_url) {
+      const link = document.createElement("a");
+      link.href = row.street_view_url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "Street View ↗";
+      linkTd.appendChild(link);
+    }
+    tr.append(classTd, canbicsTd, linkTd);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+
+  body.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "table-scroll";
+  wrap.appendChild(table);
+  body.appendChild(wrap);
+}
+
 // --- Group rows ---------------------------------------------------------
 
-// Returns {tr, ref} — ref is what saveCurrentTarget() reads back at save
-// time ({group, field, notIncludedCheckbox, initialValue, initialMethod}),
-// collected into targetRowRefs[target] by renderTargetSection below. No
-// per-row save button/status text any more (see saveCurrentTarget) — a row
-// just holds its live field state until the bottom Save button reads it.
-function renderGroupRow(target, group, columns, options, streetViewEnabled) {
+// Returns {tr, ref} — ref is what saveTarget() reads back at save time
+// ({group, field, filterOutCheckbox, ignoreCheckbox, initialValue,
+// initialMethod}), collected into targetRowRefs[target] by
+// renderTargetSection below. No per-row save button/status text any more
+// (see saveTarget) — a row just holds its live field state until one of
+// the Save buttons reads it.
+function renderGroupRow(target, group, columns, options, streetViewEnabled, showPriorYear) {
   const tr = document.createElement("tr");
   const notIncludedValue = appConfig.not_included_value;
-  const isNotIncluded = group.target === notIncludedValue;
-  const initialValue = isNotIncluded ? "" : group.target || "";
+  const ignoredValue = appConfig.ignored_value;
+  const isFilteredOut = group.target === notIncludedValue;
+  const isIgnored = group.target === ignoredValue;
+  const initialValue = isFilteredOut || isIgnored ? "" : group.target || "";
   const initialMethod = group.method;
 
   for (const col of columns) {
@@ -214,23 +397,77 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
     field.placeholder = "free text (no enum defined yet)";
   }
   field.value = initialValue;
-  field.disabled = isNotIncluded;
+  field.disabled = isFilteredOut || isIgnored;
   fieldWrap.appendChild(field);
   targetTd.appendChild(fieldWrap);
 
-  const notIncludedLabel = document.createElement("label");
-  notIncludedLabel.className = "not-included-toggle";
-  const notIncludedCheckbox = document.createElement("input");
-  notIncludedCheckbox.type = "checkbox";
-  notIncludedCheckbox.checked = isNotIncluded;
-  notIncludedCheckbox.addEventListener("change", () => {
-    field.disabled = notIncludedCheckbox.checked;
+  // Two mutually-exclusive decisions, distinct from picking a real value:
+  // "Filter out" drops the row from the dataset entirely (classify:apply
+  // ORs this across every target — see NOT_INCLUDED); "Ignore" keeps the
+  // row but leaves this one target blank for it (see IGNORED). Checking
+  // one clears the other, and clearing (not just disabling) the field
+  // avoids it reading as e.g. "multi_use_path AND filtered out" at once —
+  // the greyed-out value was still visible even though save already
+  // ignored it in that case. The field's value before either was checked
+  // is remembered and restored if both end up unchecked again, so
+  // reconsidering doesn't force re-picking from scratch.
+  let valueBeforeSkip = "";
+  function setSkip(filteredOut, ignored) {
+    field.disabled = filteredOut || ignored;
+    if (filteredOut || ignored) {
+      valueBeforeSkip = field.value || valueBeforeSkip;
+      field.value = "";
+    } else {
+      field.value = valueBeforeSkip;
+    }
+  }
+
+  const filterOutLabel = document.createElement("label");
+  filterOutLabel.className = "skip-toggle";
+  const filterOutCheckbox = document.createElement("input");
+  filterOutCheckbox.type = "checkbox";
+  filterOutCheckbox.checked = isFilteredOut;
+  filterOutLabel.append(filterOutCheckbox, " Filter out");
+  filterOutLabel.title = "Drop this row from the dataset entirely";
+  targetTd.appendChild(filterOutLabel);
+
+  const ignoreLabel = document.createElement("label");
+  ignoreLabel.className = "skip-toggle";
+  const ignoreCheckbox = document.createElement("input");
+  ignoreCheckbox.type = "checkbox";
+  ignoreCheckbox.checked = isIgnored;
+  ignoreLabel.append(ignoreCheckbox, " Ignore");
+  ignoreLabel.title = "Leave this target blank for this row, but keep the row";
+  targetTd.appendChild(ignoreLabel);
+
+  filterOutCheckbox.addEventListener("change", () => {
+    if (filterOutCheckbox.checked) ignoreCheckbox.checked = false;
+    setSkip(filterOutCheckbox.checked, ignoreCheckbox.checked);
   });
-  notIncludedLabel.appendChild(notIncludedCheckbox);
-  notIncludedLabel.append(" Not included");
-  targetTd.appendChild(notIncludedLabel);
+  ignoreCheckbox.addEventListener("change", () => {
+    if (ignoreCheckbox.checked) filterOutCheckbox.checked = false;
+    setSkip(filterOutCheckbox.checked, ignoreCheckbox.checked);
+  });
 
   tr.appendChild(targetTd);
+
+  if (showPriorYear) {
+    const prevTd = document.createElement("td");
+    const match = group.prior_year_match;
+    if (match) {
+      const pill = document.createElement(match.street_view_url ? "a" : "span");
+      pill.className = "prior-year-pill";
+      pill.textContent = match.value;
+      if (match.street_view_url) {
+        pill.href = match.street_view_url;
+        pill.target = "_blank";
+        pill.rel = "noopener";
+        pill.title = "Open the street view image this decision was based on";
+      }
+      prevTd.appendChild(pill);
+    }
+    tr.appendChild(prevTd);
+  }
 
   if (streetViewEnabled) {
     const svTd = document.createElement("td");
@@ -242,13 +479,13 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled) {
     tr.appendChild(svTd);
   }
 
-  return { tr, ref: { group, field, notIncludedCheckbox, initialValue, initialMethod } };
+  return { tr, ref: { group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod } };
 }
 
 // --- Target sections (one per tab) --------------------------------------
 
 const targetDataByName = {}; // target -> targetData, kept for tab status recompute after a save
-const targetRowRefs = {}; // target -> [{group, field, notIncludedCheckbox, initialValue, initialMethod}], read by saveCurrentTarget()
+const targetRowRefs = {}; // target -> [{group, field, filterOutCheckbox, ignoreCheckbox, initialValue, initialMethod}], read by saveTarget()
 
 // not_applicable: no source columns configured/present, or no value combos
 // at all. not_started: nothing saved yet. complete: every combo has a saved
@@ -286,6 +523,17 @@ function renderTargetSection(target, targetData) {
     return section;
   }
 
+  if (targetData.show_prior_year) {
+    const toolbar = document.createElement("div");
+    toolbar.className = "target-toolbar";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = priorYearLabel();
+    btn.addEventListener("click", openPriorYearModal);
+    toolbar.appendChild(btn);
+    section.appendChild(toolbar);
+  }
+
   const columns = targetData.source_columns;
   const table = document.createElement("table");
 
@@ -298,6 +546,11 @@ function renderTargetSection(target, targetData) {
   for (const width of ["70px", "260px"]) {
     const col = document.createElement("col");
     col.style.width = width;
+    colgroup.appendChild(col);
+  }
+  if (targetData.show_prior_year) {
+    const col = document.createElement("col");
+    col.style.width = "130px";
     colgroup.appendChild(col);
   }
   if (targetData.street_view) {
@@ -319,6 +572,11 @@ function renderTargetSection(target, targetData) {
     th.textContent = label;
     headRow.appendChild(th);
   }
+  if (targetData.show_prior_year) {
+    const th = document.createElement("th");
+    th.textContent = priorYearLabel();
+    headRow.appendChild(th);
+  }
   if (targetData.street_view) {
     const th = document.createElement("th");
     th.textContent = "Street View";
@@ -330,7 +588,9 @@ function renderTargetSection(target, targetData) {
   const tbody = document.createElement("tbody");
   const refs = [];
   for (const group of targetData.groups) {
-    const { tr, ref } = renderGroupRow(target, group, columns, targetData.options, targetData.street_view);
+    const { tr, ref } = renderGroupRow(
+      target, group, columns, targetData.options, targetData.street_view, targetData.show_prior_year
+    );
     tbody.appendChild(tr);
     refs.push(ref);
   }
@@ -441,27 +701,37 @@ async function loadClassifiedCount() {
 // while the first is still in flight, with no visible sign anything is
 // happening.
 function setSaving(inProgress, message) {
+  document.getElementById("save-btn").disabled = inProgress;
   document.getElementById("save-next-btn").disabled = inProgress;
   document.getElementById("save-back-btn").disabled = inProgress;
   document.getElementById("save-status").textContent = message || "";
 }
 
-// Bulk-saves every row of the currently active tab in one request — the
-// "single save button at bottom" model, replacing the old per-row auto-save.
-// A row left blank (no target value, not marked "Not included") is simply
-// omitted rather than sent empty, so it stays not_started/needs_review
-// rather than being saved as nothing. Returns true on success (with
+// Bulk-saves every row of one tab in a single request — the "single save
+// button at bottom" model, replacing the old per-row auto-save. A row left
+// blank (no target value, not marked "Not included") is simply omitted
+// rather than sent empty, so it stays not_started/needs_review rather than
+// being saved as nothing. Returns true on success (with
 // targetDataByName/tab status already refreshed) or false on failure (with
 // the failure message already written to #save-status).
-async function saveCurrentTarget() {
-  const refs = targetRowRefs[activeTarget] || [];
-  const notIncludedValue = appConfig.not_included_value;
+// A row's effective target value — whichever of Filter out / Ignore /
+// the real field is currently in play. Neither checkbox can be checked at
+// once (see renderGroupRow's mutual-exclusion wiring), so this is a plain
+// priority order, not a real conflict to resolve.
+function rowValue(ref) {
+  if (ref.filterOutCheckbox.checked) return appConfig.not_included_value;
+  if (ref.ignoreCheckbox.checked) return appConfig.ignored_value;
+  return ref.field.value.trim();
+}
+
+async function saveTarget(target) {
+  const refs = targetRowRefs[target] || [];
   const entries = [];
   for (const ref of refs) {
-    const value = ref.notIncludedCheckbox.checked ? notIncludedValue : ref.field.value.trim();
+    const value = rowValue(ref);
     if (!value) continue;
-    const method =
-      !ref.notIncludedCheckbox.checked && value === ref.initialValue && ref.initialMethod === "rule" ? "rule" : "manual";
+    const isSkip = ref.filterOutCheckbox.checked || ref.ignoreCheckbox.checked;
+    const method = !isSkip && value === ref.initialValue && ref.initialMethod === "rule" ? "rule" : "manual";
     entries.push({ values: ref.group.values, target_value: value, method });
   }
 
@@ -471,7 +741,7 @@ async function saveCurrentTarget() {
     const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target: activeTarget, entries }),
+      body: JSON.stringify({ target, entries }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -484,10 +754,23 @@ async function saveCurrentTarget() {
   }
 
   for (const ref of refs) {
-    const value = ref.notIncludedCheckbox.checked ? notIncludedValue : ref.field.value.trim();
-    if (value) ref.group.confidence = "saved";
+    if (rowValue(ref)) ref.group.confidence = "saved";
   }
-  updateTabStatus(activeTarget);
+  updateTabStatus(target);
+  return true;
+}
+
+// Saves every tab, not just the active one — for the plain "Save" button,
+// which is a checkpoint (stays on this page) rather than "I'm done with
+// this tab" (save-next-btn/save-back-btn, which only ever touched the
+// active tab since that's all a reviewer had necessarily finished). Stops
+// at the first failure rather than saving the rest out of order, same
+// fail-fast behavior saveTarget already has for a single tab.
+async function saveAllTargets() {
+  for (const target of allTargetNames) {
+    const ok = await saveTarget(target);
+    if (!ok) return false;
+  }
   return true;
 }
 
@@ -567,11 +850,20 @@ async function load() {
   loadClassifiedCount();
 }
 
+// Checkpoint: saves every tab's in-progress edits (not just the active
+// one) and stays right here — for a source complicated enough to span
+// several tabs before any one of them feels "done" (see saveAllTargets).
+document.getElementById("save-btn").addEventListener("click", async () => {
+  setSaving(true, "Saving…");
+  const ok = await saveAllTargets();
+  setSaving(false, ok ? "Saved ✓" : undefined);
+});
+
 // Saves the active tab, then advances: to the next tab still needing work
 // on this source if there is one, otherwise to the next source (or home).
 document.getElementById("save-next-btn").addEventListener("click", async () => {
   setSaving(true, "Saving…");
-  const ok = await saveCurrentTarget();
+  const ok = await saveTarget(activeTarget);
   if (!ok) return;
 
   const nextTarget = findNextIncompleteTarget(activeTarget);
@@ -594,7 +886,7 @@ document.getElementById("save-next-btn").addEventListener("click", async () => {
 // unsaved edits on the way out" reasoning as Save & next above.
 document.getElementById("save-back-btn").addEventListener("click", async () => {
   setSaving(true, "Saving…");
-  const ok = await saveCurrentTarget();
+  const ok = await saveTarget(activeTarget);
   if (!ok) return;
   goHome();
 });

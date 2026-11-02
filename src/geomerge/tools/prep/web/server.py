@@ -20,6 +20,7 @@ from geomerge.helpers.config import load_config
 from geomerge.helpers.status import classification_overall
 from geomerge.pipeline.status import preprocessing_status
 from geomerge.tools.classification.status import source_status as classification_status
+from geomerge.tools.collection.status import source_flagged as collection_flagged
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
 
 
@@ -58,6 +59,13 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 # ORs this against a classification_flagged field that simply
                 # doesn't exist yet, so adding one later needs no rework here.
                 "column_mapping_flagged": cm["flagged"],
+                # Collection-stage flag (checklist.csv, joined via
+                # metadata.yaml's provider_id) — disconnected from
+                # column_mapping's own flag above, but both now gate
+                # classification eligibility the same way (see
+                # classification/status.py's is_eligible()), so both need
+                # surfacing here too.
+                "collection_flagged": collection_flagged(source_id, config),
                 # Mechanical, no review UI of its own — but classification
                 # can't run without it (it reads the standardized columns
                 # preprocessing produces, not raw ones), so it sits between
