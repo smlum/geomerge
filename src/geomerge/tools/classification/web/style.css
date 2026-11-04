@@ -474,6 +474,38 @@ input[type="text"] {
   overflow: hidden;
 }
 
+.sv-map-wrap {
+  position: relative;
+}
+
+.sv-map-zoom {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+.sv-map-legend {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+}
+
+/* Same colors as the map's layers (renderSampleMap), which can't use the
+   theme's tokens. */
+.sv-key-network {
+  color: #1e66f5;
+}
+
+.sv-key-segment {
+  color: #8839ef;
+}
+
+.sv-key-point {
+  color: #fe640b;
+}
+
 .sv-mock-row .sv-sample-detail {
   margin-bottom: 0.5rem;
 }

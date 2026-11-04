@@ -45,7 +45,25 @@ async function fetchSamplePoints(target, values, fresh) {
   return { points: data.points || [], spare: data.spare_points || [] };
 }
 
-// --- Street View modal ------------------------------------------------------
+// One request per group per page load; every sample's map draws from the same
+// promise. Failures resolve to null so a map just goes without its network.
+const networkCache = new Map(); // key -> Promise<{n_features, geometry} | null>
+
+function fetchNetwork(target, values) {
+  const key = cacheKey(target, values);
+  if (!networkCache.has(key)) {
+    networkCache.set(key, fetch(`api/network/${encodeURIComponent(sourceId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target, values }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null));
+  }
+  return networkCache.get(key);
+}
+
+// --- Inspect modal ----------------------------------------------------------
 // A single shared modal, built once and reused for every group — decouples
 // the viewer from the table entirely (always centered, never off-screen to
 // the right of a wide table), unlike the previous per-row inline panel.
@@ -93,9 +111,18 @@ function renderSampleValues(point) {
   return dl;
 }
 
-function renderSampleMap(point) {
+function renderSampleMap(point, networkPromise) {
+  const wrap = document.createElement("div");
+  wrap.className = "sv-map-wrap";
   const mapEl = document.createElement("div");
   mapEl.className = "sv-point-map";
+  const zoomBtn = document.createElement("button");
+  zoomBtn.type = "button";
+  zoomBtn.className = "sv-map-zoom hidden";
+  const legend = document.createElement("div");
+  legend.className = "meta sv-map-legend";
+  legend.textContent = "Loading network…";
+  wrap.append(mapEl, zoomBtn, legend);
 
   requestAnimationFrame(() => {
     if (!window.maplibregl) {
@@ -147,33 +174,82 @@ function renderSampleMap(point) {
         },
       });
 
-      const bounds = new maplibregl.LngLatBounds();
-      const extendBounds = (coordinates) => {
-        if (typeof coordinates[0] === "number") {
-          bounds.extend(coordinates);
-        } else {
-          coordinates.forEach(extendBounds);
-        }
+      const boundsOf = (geometry) => {
+        const bounds = new maplibregl.LngLatBounds();
+        const extendBounds = (coordinates) => {
+          if (typeof coordinates[0] === "number") {
+            bounds.extend(coordinates);
+          } else {
+            coordinates.forEach(extendBounds);
+          }
+        };
+        extendBounds(geometry.coordinates);
+        bounds.extend([point.lng, point.lat]);
+        return bounds;
       };
-      extendBounds(point.segment.coordinates);
-      bounds.extend([point.lng, point.lat]);
-      map.fitBounds(bounds, { padding: 18, maxZoom: 17, duration: 0 });
+      const segmentBounds = boundsOf(point.segment);
+      map.fitBounds(segmentBounds, { padding: 18, maxZoom: 17, duration: 0 });
+
+      networkPromise.then((network) => {
+        if (!network || !network.geometry) {
+          legend.textContent = "Network unavailable — showing this segment only.";
+          return;
+        }
+        map.addSource("sample-network", {
+          type: "geojson",
+          data: { type: "Feature", geometry: network.geometry, properties: {} },
+        });
+        map.addLayer({
+          id: "sample-network",
+          type: "line",
+          source: "sample-network",
+          paint: { "line-color": "#1e66f5", "line-width": 2, "line-opacity": 0.7 },
+        }, "sample-segment");
+
+        const networkBounds = boundsOf(network.geometry);
+        let showingNetwork = true;
+        const showView = () => {
+          map.fitBounds(showingNetwork ? networkBounds : segmentBounds, { padding: 18, maxZoom: 17, duration: 0 });
+          zoomBtn.textContent = showingNetwork ? "Zoom to segment" : "Show network";
+        };
+        zoomBtn.addEventListener("click", () => {
+          showingNetwork = !showingNetwork;
+          showView();
+        });
+        zoomBtn.classList.remove("hidden");
+        showView();
+
+        legend.innerHTML = "";
+        const key = (className, text) => {
+          const span = document.createElement("span");
+          span.className = className;
+          span.textContent = text;
+          return span;
+        };
+        legend.append(
+          key("sv-key-network", `Blue: all ${network.n_features.toLocaleString()} features with these values`),
+          " · ",
+          key("sv-key-segment", "Purple: this feature"),
+          " · ",
+          key("sv-key-point", "Orange: this sample"),
+        );
+      });
     });
   });
 
-  return mapEl;
+  return wrap;
 }
 
 // The per-sample values + map — shared by both mock and live rendering
 // below, and re-rendered as a pair whenever the displayed sample changes.
-function renderSampleDetail(point) {
+function renderSampleDetail(point, networkPromise) {
   const wrap = document.createElement("div");
   wrap.className = "sv-sample-detail";
-  wrap.append(renderSampleValues(point), renderSampleMap(point));
+  wrap.append(renderSampleValues(point), renderSampleMap(point, networkPromise));
   return wrap;
 }
 
-function renderPoints(container, points, onRegenerate) {
+function renderPoints(container, points, onRegenerate, networkPromise) {
   container.innerHTML = "";
   if (!points.length) {
     container.textContent = "No sample points (no matching geometry).";
@@ -193,7 +269,7 @@ function renderPoints(container, points, onRegenerate) {
       link.rel = "noopener";
       link.textContent = `Sample ${i + 1}`;
       row.appendChild(link);
-      row.appendChild(renderSampleDetail(p));
+      row.appendChild(renderSampleDetail(p, networkPromise));
       container.appendChild(row);
     }
   } else {
@@ -218,13 +294,13 @@ function renderPoints(container, points, onRegenerate) {
         idx = (idx + 1) % points.length;
         iframe.src = embedUrl(points[idx]);
         label.textContent = `Sample ${idx + 1} / ${points.length}`;
-        detailEl.replaceWith(renderSampleDetail(points[idx]));
+        detailEl.replaceWith(renderSampleDetail(points[idx], networkPromise));
         detailEl = container.querySelector(".sv-sample-detail");
       });
       nav.appendChild(next);
     }
     container.appendChild(nav);
-    detailEl = renderSampleDetail(points[idx]);
+    detailEl = renderSampleDetail(points[idx], networkPromise);
   }
 
   const regenBtn = document.createElement("button");
@@ -251,6 +327,7 @@ async function openStreetView(target, group) {
   modal.classList.remove("hidden");
 
   const key = cacheKey(target, group.values);
+  const networkPromise = fetchNetwork(target, group.values);
 
   async function regenerate() {
     let cached = sampleCache.get(key);
@@ -261,7 +338,7 @@ async function openStreetView(target, group) {
       cached = await fetchSamplePoints(target, group.values, true);
       sampleCache.set(key, cached);
     }
-    renderPoints(body, cached.points, regenerate);
+    renderPoints(body, cached.points, regenerate, networkPromise);
   }
 
   let cached = sampleCache.get(key);
@@ -269,7 +346,7 @@ async function openStreetView(target, group) {
     cached = await fetchSamplePoints(target, group.values, false);
     sampleCache.set(key, cached);
   }
-  renderPoints(body, cached.points, regenerate);
+  renderPoints(body, cached.points, regenerate, networkPromise);
 }
 
 // Generic display text — geomerge itself is domain-agnostic, and not every
@@ -462,7 +539,8 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
   if (streetViewEnabled) {
     const svTd = document.createElement("td");
     const svBtn = document.createElement("button");
-    svBtn.textContent = "View";
+    svBtn.textContent = "Inspect";
+    svBtn.title = "Street View, sampled values, and this group's network on a map";
     svBtn.className = "sv-btn";
     svBtn.addEventListener("click", () => openStreetView(target, group));
     svTd.appendChild(svBtn);
@@ -547,7 +625,7 @@ function renderTargetSection(target, targetData) {
   }
   if (targetData.street_view) {
     const col = document.createElement("col");
-    col.style.width = "100px";
+    col.style.width = "85px";
     colgroup.appendChild(col);
   }
   const flagCol = document.createElement("col");
@@ -575,7 +653,7 @@ function renderTargetSection(target, targetData) {
   }
   if (targetData.street_view) {
     const th = document.createElement("th");
-    th.textContent = "Street View";
+    th.textContent = "Inspect";
     headRow.appendChild(th);
   }
   const flagTh = document.createElement("th");

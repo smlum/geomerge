@@ -11,6 +11,10 @@ import geopandas as gpd
 import numpy as np
 
 
+NETWORK_SIMPLIFY_DEGREES = 0.00005  # ~5m
+NETWORK_PRECISION_DEGREES = 0.00001  # ~1m
+
+
 def ensure_projected(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     if gdf.crs is None:
         raise ValueError("input has no CRS defined")
@@ -28,6 +32,21 @@ def _stringify(value) -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return ""
     return str(value)
+
+
+def network_geometry(gdf: gpd.GeoDataFrame):
+    """gdf's lines as one simplified WGS84 GeoJSON geometry, for drawing a whole
+    network on a map: merging drops duplicates, and ~5m simplification keeps
+    even the largest group small enough to send to a browser. Good for an
+    overview, not for measuring. None if there are no lines to draw."""
+    if gdf.crs is None:
+        raise ValueError("input has no CRS defined")
+    lines = gdf.geometry[gdf.geometry.geom_type.isin(["LineString", "MultiLineString"])]
+    if lines.empty:
+        return None
+    lines = lines.to_crs("EPSG:4326").drop_duplicates()
+    merged = lines.simplify(NETWORK_SIMPLIFY_DEGREES).set_precision(NETWORK_PRECISION_DEGREES).union_all()
+    return None if merged.is_empty else merged.__geo_interface__
 
 
 def sample_points(gdf: gpd.GeoDataFrame, n: int, seed: int = None) -> list:

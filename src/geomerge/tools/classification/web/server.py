@@ -35,6 +35,7 @@ from geomerge.helpers.matching import match_name, normalize
 from geomerge.helpers.schema import get_field
 from geomerge.tools.classification.prior_year import prior_year_lookup
 from geomerge.tools.classification.status import (
+    cached_network,
     columns_and_combos,
     find_mapping,
     is_eligible,
@@ -328,6 +329,19 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "points": points[:n_samples],
             "spare_points": points[n_samples:],
         })
+
+    # Separate from sample_points so the inspect modal opens straight away even
+    # when a large group's network takes a few seconds to merge the first time.
+    @bp.route("/api/network/<source_id>", methods=["POST"])
+    def api_network(source_id):
+        data = request.get_json()
+        target = data.get("target")
+        if target not in targets:
+            return jsonify({"error": f"unknown target '{target}'"}), 400
+        if not preprocessed_path(source_id, config).exists():
+            return jsonify({"error": f"no preprocessed data for {source_id}"}), 404
+        columns, _ = columns_and_combos(source_id, target, config)
+        return jsonify(cached_network(source_id, columns, data.get("values") or {}, config))
 
     # The raw file text — for geomerge serve's read-only classification_map.yaml
     # preview modal, same pattern as collection's /api/source/<id>/raw.

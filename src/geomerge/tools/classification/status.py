@@ -1,6 +1,7 @@
 """Status helpers usable without spinning up classification's Flask app —
 source_status is what geomerge serve shows in its table."""
 
+import json
 import math
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import yaml
 from geomerge.helpers.config import stage_output_dir
 from geomerge.helpers.constants import REVIEW_FLAGS
 from geomerge.helpers.file_cache import cached_read, cached_yaml
+from geomerge.helpers.geo_sampling import network_geometry
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_APPLICABLE, NOT_STARTED
 from geomerge.pipeline.status import preprocessing_status
 from geomerge.tools.collection.status import source_flagged as collection_flagged
@@ -71,6 +73,26 @@ def columns_and_combos(source_id: str, target: str, config: dict) -> tuple:
     names = cached_read(path, _read_column_names)
     columns = [c for c in source_columns if c in names]
     return columns, cached_read(path, _read_combos, tuple(columns)) if columns else []
+
+
+def _read_network(path: Path, columns: tuple, values: tuple) -> dict:
+    import geopandas as gpd
+
+    # Only the filter columns and geometry, not the whole file.
+    geo_metadata = json.loads(pq.read_schema(path).metadata[b"geo"])
+    df = gpd.read_parquet(path, columns=[*columns, geo_metadata["primary_column"]])
+    mask = pd.Series(True, index=df.index)
+    for column, value in zip(columns, values):
+        mask &= df[column].map(stringify) == value
+    subset = df[mask]
+    return {"n_features": int(len(subset)), "geometry": network_geometry(subset)}
+
+
+def cached_network(source_id: str, columns: list, values: dict, config: dict) -> dict:
+    """Every feature sharing one combination of raw values, merged for a map.
+    Merging the largest groups takes seconds, hence the cache."""
+    path = preprocessed_path(source_id, config)
+    return cached_read(path, _read_network, tuple(columns), tuple(values.get(c, "") for c in columns))
 
 
 def find_mapping(mappings: list, columns: list, values: dict):
