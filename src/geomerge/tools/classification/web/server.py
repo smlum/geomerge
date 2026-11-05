@@ -39,6 +39,7 @@ from geomerge.tools.classification.status import (
     columns_and_combos,
     find_mapping,
     is_eligible,
+    load_value_labels,
     load_yaml,
     preprocessed_path,
     present_columns,
@@ -214,7 +215,16 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 "groups": groups,
             }
 
-        return jsonify({"source_id": source_id, "source_notes": saved.get("notes", ""), "targets": result})
+        return jsonify({
+            "source_id": source_id,
+            "source_notes": saved.get("notes", ""),
+            "source_flagged": bool(saved.get("flagged", False)),
+            "value_labels": load_value_labels(source_id, config),
+            # For the value label popup's link -- metadata.yaml stays the one
+            # place a source's dictionary URL is recorded.
+            "data_dictionary_url": load_yaml(sources_dir / source_id / "metadata.yaml").get("data_dictionary_url", ""),
+            "targets": result,
+        })
 
     # Bulk save — every row of the currently-open tab's table in one request,
     # same "single save button at bottom" model as column_mapping's map.js
@@ -224,7 +234,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
     # empty target_value, so this endpoint doesn't need to distinguish
     # "explicitly cleared" from "never touched" — see review.js's save flow.
     # "source_notes", when present, replaces the file's top-level `notes`, and
-    # can be sent without any entries.
+    # can be sent without any entries. "source_flagged" likewise sets or clears
+    # the top-level `flagged`, which only makes "next" skip the source.
     @bp.route("/api/classification/<source_id>", methods=["POST"])
     def api_classification_save(source_id):
         if not is_eligible(source_id, config):
@@ -234,8 +245,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
         target = data.get("target")
         entries = data.get("entries") or []
 
-        if not entries and "source_notes" not in data:
-            return jsonify({"error": "entries or source_notes required"}), 400
+        if not entries and "source_notes" not in data and "source_flagged" not in data:
+            return jsonify({"error": "entries, source_notes or source_flagged required"}), 400
         if entries and target not in targets:
             return jsonify({"error": f"unknown target '{target}'"}), 400
         for item in entries:
@@ -251,6 +262,13 @@ def create_blueprint(config: dict = None) -> Blueprint:
             if source_notes:
                 # First in the file, above the per-target sections.
                 saved = {"notes": source_notes, **saved}
+
+        if "source_flagged" in data:
+            saved.pop("flagged", None)
+            if data["source_flagged"]:
+                # Beside the notes that explain it, above the per-target sections.
+                notes = saved.pop("notes", None)
+                saved = {**({"notes": notes} if notes else {}), "flagged": True, **saved}
 
         if entries:
             columns = targets[target]["source_columns"]

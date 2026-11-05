@@ -36,8 +36,8 @@
     <div class="save-row">
       <div class="save-row-buttons">
         <button id="save-btn" type="button">Save</button>
-        <button id="save-next-btn">Save &amp; next &rarr;</button>
-        <button id="save-back-btn" type="button">&larr; Save &amp; back to home</button>
+        <button id="save-next-btn">Save &amp; next</button>
+        <button id="flag-next-btn" type="button">&#9873; Flag &amp; next</button>
       </div>
     </div>
   </div>
@@ -64,6 +64,22 @@
         <button id="file-preview-close" class="modal-close" type="button">&times;</button>
       </div>
       <pre id="file-preview-content" class="code-block hljs"></pre>
+    </div>
+  </div>
+
+  <div id="unsaved-modal" class="modal-overlay hidden">
+    <div class="modal-panel unsaved-modal-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2>Unsaved changes</h2>
+          <div class="meta">Save your changes before leaving this source?</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="unsaved-save-btn" type="button">Save &amp; leave</button>
+        <button id="unsaved-discard-btn" type="button">Leave without saving</button>
+        <button id="unsaved-stay-btn" type="button">Stay</button>
+      </div>
     </div>
   </div>
 

@@ -61,6 +61,13 @@ function classificationCell(s) {
     note.title = s.classification_notes;
     td.appendChild(note);
   }
+  if (s.classification_source_flagged) {
+    const marker = document.createElement("span");
+    marker.className = "review-marker review-marker-flagged";
+    marker.textContent = "flagged";
+    marker.title = s.classification_notes;
+    td.appendChild(marker);
+  }
   for (const [flag, count] of Object.entries(s.classification_flag_counts)) {
     if (!count) continue;
     const marker = document.createElement("span");

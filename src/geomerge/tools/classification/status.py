@@ -29,6 +29,25 @@ def stringify(value) -> str:
     return str(value)
 
 
+def load_value_labels(source_id: str, config: dict) -> dict:
+    """{column: {raw_value: {"label": ..., "basis": ..., "notes": ...}}} from the source's
+    optional, hand-maintained value_labels.yaml -- what a coded raw value means.
+    Display only: mappings and matching rules stay keyed on the raw value.
+    Entries with a blank label are still-unknown placeholders, so are skipped.
+    Keys go through str() so an unquoted YAML 1 still matches the raw "1"."""
+    path = config["repo_root"] / config["sources_dir"] / source_id / "value_labels.yaml"
+    result = {}
+    for column, values in load_yaml(path).items():
+        labelled = {
+            str(value): {"label": entry["label"], "basis": entry.get("basis", ""), "notes": entry.get("notes", "")}
+            for value, entry in (values or {}).items()
+            if (entry or {}).get("label")
+        }
+        if labelled:
+            result[column] = labelled
+    return result
+
+
 def present_columns(df, target: str, targets_config: dict) -> list:
     return [c for c in targets_config[target]["source_columns"] if c in df.columns]
 
@@ -137,7 +156,8 @@ def target_status(source_id: str, target: str, config: dict) -> str:
 
 
 def review_markers(source_id: str, config: dict) -> dict:
-    """{"notes": source-level note, "flag_counts": {flag: n, ...}} from
+    """{"notes": source-level note, "flagged": source-level flag,
+    "flag_counts": {flag: n, ...}} from
     classification_map.yaml alone — no parquet read, so it's cheap to call for
     every source on the Prepare dashboard."""
     targets_config = config["tools"]["classification"]["targets"]
@@ -148,7 +168,7 @@ def review_markers(source_id: str, config: dict) -> dict:
         for mapping in saved.get(target, {}).get("mappings", []):
             if mapping.get("flag") in flag_counts:
                 flag_counts[mapping["flag"]] += 1
-    return {"notes": saved.get("notes", ""), "flag_counts": flag_counts}
+    return {"notes": saved.get("notes", ""), "flagged": bool(saved.get("flagged", False)), "flag_counts": flag_counts}
 
 
 def source_status(source_id: str, config: dict) -> dict:
@@ -161,5 +181,6 @@ def source_status(source_id: str, config: dict) -> dict:
         return {"has_preprocessed_data": False, "targets": {name: NOT_APPLICABLE for name in targets_config}}
     return {
         "has_preprocessed_data": True,
+        "flagged": review_markers(source_id, config)["flagged"],
         "targets": {name: target_status(source_id, name, config) for name in targets_config},
     }

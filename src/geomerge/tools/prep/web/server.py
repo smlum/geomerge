@@ -62,7 +62,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 # here that gate eligibility, these never block anything.
                 "classification_notes": markers["notes"],
                 "classification_flag_counts": markers["flag_counts"],
-                "classification_flagged": any(markers["flag_counts"].values()),
+                "classification_source_flagged": markers["flagged"],
+                "classification_flagged": markers["flagged"] or any(markers["flag_counts"].values()),
                 # Collection-stage flag (checklist.csv, joined via
                 # metadata.yaml's provider_id) — disconnected from
                 # column_mapping's own flag above, but both now gate

@@ -13,7 +13,12 @@ function goHome() {
 async function findNextSource(sourceId, statusUrl, isIncomplete) {
   const res = await fetch(statusUrl);
   const sources = await res.json();
-  const next = sources.find((s) => s.source_id !== sourceId && isIncomplete(s));
+  // Forward from the current source, wrapping around, rather than the first
+  // incomplete overall: that would keep returning to any source left unfinished
+  // earlier in the list.
+  const start = sources.findIndex((s) => s.source_id === sourceId);
+  const ordered = [...sources.slice(start + 1), ...sources.slice(0, Math.max(start, 0))];
+  const next = ordered.find(isIncomplete);
   return next ? next.source_id : null;
 }
 

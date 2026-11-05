@@ -9,6 +9,10 @@ const sampleCache = new Map(); // key -> { points: [...], spare: [...] }
 let modalEl = null;
 let activeTarget = null;
 let allTargetNames = [];
+let valueLabels = {}; // column -> raw value -> {label, basis, notes}, from the source's value_labels.yaml
+let dataDictionaryUrl = "";
+let sourceFlagged = false;
+const visitedTargets = new Set(); // tabs opened on this page load -- see saveVisitedTargets()
 
 function cacheKey(target, values) {
   return `${target}::${JSON.stringify(values)}`;
@@ -321,7 +325,7 @@ async function openStreetView(target, group) {
   const body = modal.querySelector("#sv-modal-body");
 
   title.textContent = Object.entries(group.values)
-    .map(([k, v]) => `${k}: ${v === "" ? "(blank)" : v}`)
+    .map(([k, v]) => `${k}: ${valueWithLabel(k, v)}`)
     .join("  ·  ");
   body.textContent = "Loading…";
   modal.classList.remove("hidden");
@@ -366,8 +370,102 @@ function priorYearLabel() {
 
 let flagModalRef = null;
 
+// --- Value label popup ----------------------------------------------------
+// Says what a label is and where it came from, with a link to the dictionary.
+// Opens on click, since it holds a link. One element on <body>, positioned by
+// the clicked label, since .table-scroll's overflow would clip anything
+// anchored inside the row.
+
+const VALUE_LABEL_BASIS_TEXT = {
+  data_dictionary: "Published by the data provider",
+  inferred: "Inferred, not a published definition",
+  translated: "Translated from the provider's wording",
+};
+
+let valueLabelPopup = null;
+let valueLabelPopupAnchor = null;
+
+function hideValueLabelPopup() {
+  valueLabelPopup?.classList.add("hidden");
+  valueLabelPopupAnchor?.setAttribute("aria-expanded", "false");
+  valueLabelPopupAnchor = null;
+}
+
+function ensureValueLabelPopup() {
+  if (valueLabelPopup) return valueLabelPopup;
+  valueLabelPopup = document.createElement("div");
+  valueLabelPopup.className = "value-label-popup hidden";
+  document.body.appendChild(valueLabelPopup);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideValueLabelPopup();
+  });
+  document.addEventListener("click", (e) => {
+    if (!valueLabelPopup.contains(e.target) && !e.target.closest(".value-label")) hideValueLabelPopup();
+  });
+  // Fixed position wouldn't follow the table as it scrolls. Capture phase
+  // because scroll events don't bubble up from .table-scroll.
+  window.addEventListener("scroll", (e) => {
+    if (!valueLabelPopup.contains(e.target)) hideValueLabelPopup();
+  }, true);
+  return valueLabelPopup;
+}
+
+function showValueLabelPopup(anchor, column, value, entry) {
+  const popup = ensureValueLabelPopup();
+  hideValueLabelPopup();
+  valueLabelPopupAnchor = anchor;
+  anchor.setAttribute("aria-expanded", "true");
+  popup.innerHTML = "";
+
+  const addLine = (className, text) => {
+    const line = document.createElement("div");
+    line.className = className;
+    line.textContent = text;
+    popup.appendChild(line);
+  };
+  addLine("value-label-popup-key", `${column} = ${value}`);
+  addLine("value-label-popup-label", entry.label);
+  addLine("value-label-popup-basis", VALUE_LABEL_BASIS_TEXT[entry.basis] || "Source not recorded");
+  if (entry.notes) addLine("value-label-popup-notes", entry.notes);
+
+  // An inferred label didn't come from the dictionary, so linking one would
+  // imply otherwise. Only http(s), since the URL is hand-entered metadata.
+  if (entry.basis !== "inferred" && /^https?:\/\//i.test(dataDictionaryUrl)) {
+    const link = document.createElement("a");
+    link.href = dataDictionaryUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "View data dictionary ↗";
+    popup.appendChild(link);
+  }
+
+  // Measured after filling; flips above the label if it'd run off the bottom.
+  popup.classList.remove("hidden");
+  const rect = anchor.getBoundingClientRect();
+  const { width, height } = popup.getBoundingClientRect();
+  const margin = 8;
+  const below = rect.bottom + 4;
+  const top = below + height + margin > window.innerHeight ? rect.top - height - 4 : below;
+  popup.style.top = `${Math.max(margin, top)}px`;
+  popup.style.left = `${Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin))}px`;
+}
+
+function attachValueLabelPopup(labelEl, column, value, entry) {
+  labelEl.setAttribute("aria-expanded", "false");
+  labelEl.addEventListener("click", () => {
+    if (valueLabelPopupAnchor === labelEl) hideValueLabelPopup();
+    else showValueLabelPopup(labelEl, column, value, entry);
+  });
+}
+
+function valueWithLabel(column, value) {
+  const raw = value === "" ? "(blank)" : value;
+  const label = valueLabels[column]?.[value]?.label;
+  return label ? `${raw} (${label})` : raw;
+}
+
 function groupLabel(group) {
-  return Object.values(group.values).map((v) => (v === "" ? "(blank)" : v)).join(" · ");
+  return Object.entries(group.values).map(([k, v]) => valueWithLabel(k, v)).join(" · ");
 }
 
 function updateFlagButton(ref) {
@@ -433,6 +531,17 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
     const v = group.values[col] ?? "";
     td.textContent = v === "" ? "(blank)" : v;
     td.title = v;
+    const labelEntry = valueLabels[col]?.[v];
+    if (labelEntry) {
+      const labelEl = document.createElement("button");
+      labelEl.type = "button";
+      labelEl.className = "value-label";
+      labelEl.textContent = labelEntry.label;
+      labelEl.title = ""; // keeps the cell's native tooltip from showing over the label
+      if (labelEntry.notes) labelEl.classList.add("has-notes");
+      attachValueLabelPopup(labelEl, col, v, labelEntry);
+      td.appendChild(labelEl);
+    }
     tr.appendChild(td);
   }
 
@@ -710,6 +819,7 @@ function renderTabs(targetNames) {
 
 function setActiveTarget(target) {
   activeTarget = target;
+  visitedTargets.add(target);
   for (const btn of document.querySelectorAll(".target-tab")) {
     btn.classList.toggle("active", btn.dataset.target === target);
   }
@@ -756,22 +866,6 @@ function updateStickyOffsets() {
 }
 window.addEventListener("resize", updateStickyOffsets);
 
-function isIncomplete(s) {
-  return s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
-}
-
-async function loadClassifiedCount() {
-  const res = await fetch("api/sources");
-  const sources = await res.json();
-  const rolledUp = (s) => {
-    const values = Object.values(s.targets);
-    if (!values.length || values.every((v) => v === "not_applicable")) return "not_applicable";
-    return values.every((v) => v === "complete" || v === "not_applicable") ? "complete" : "not_complete";
-  };
-  const classifiedCount = sources.filter((s) => rolledUp(s) === "complete").length;
-  document.getElementById("classified-count").textContent = `${classifiedCount} / ${sources.length} sources classified`;
-}
-
 // Both buttons disabled for the whole operation, same reasoning as
 // column-mapping's map.js: the save + "find next" sequence below is a few
 // requests deep, and leaving either button live invites a double-submit
@@ -780,7 +874,7 @@ async function loadClassifiedCount() {
 function setSaving(inProgress, message) {
   document.getElementById("save-btn").disabled = inProgress;
   document.getElementById("save-next-btn").disabled = inProgress;
-  document.getElementById("save-back-btn").disabled = inProgress;
+  document.getElementById("flag-next-btn").disabled = inProgress;
   document.getElementById("save-status").textContent = message || "";
 }
 
@@ -800,6 +894,66 @@ function rowValue(ref) {
   if (ref.ignoreCheckbox.checked) return appConfig.ignored_value;
   return ref.field.value.trim();
 }
+
+// --- Unsaved changes ------------------------------------------------------
+// A row counts as changed once it differs from how the page loaded it or how
+// it was last saved, so a pre-filled suggestion left alone isn't a change.
+
+function rowSnapshot(ref) {
+  return JSON.stringify([rowValue(ref), ref.flag || "", ref.notes || ""]);
+}
+
+function markRowsSaved(refs) {
+  for (const ref of refs) ref.savedSnapshot = rowSnapshot(ref);
+}
+
+function hasUnsavedChanges() {
+  if (document.getElementById("source-notes").value.trim() !== savedSourceNotes) return true;
+  return Object.values(targetRowRefs).some((refs) => refs.some((ref) => rowSnapshot(ref) !== ref.savedSnapshot));
+}
+
+let leavingPage = false;
+let pendingBackHref = null;
+
+function leaveTo(href) {
+  leavingPage = true;
+  location.href = href;
+}
+
+function closeUnsavedModal() {
+  pendingBackHref = null;
+  document.getElementById("unsaved-modal").classList.add("hidden");
+}
+
+document.querySelector(".back-link").addEventListener("click", (e) => {
+  if (!hasUnsavedChanges()) return;
+  e.preventDefault();
+  pendingBackHref = e.currentTarget.href;
+  document.getElementById("unsaved-modal").classList.remove("hidden");
+});
+
+document.getElementById("unsaved-save-btn").addEventListener("click", async () => {
+  const href = pendingBackHref;
+  closeUnsavedModal();
+  setSaving(true, "Saving\u2026");
+  const ok = (await saveSourceNotes()) && (await saveVisitedTargets());
+  if (ok) leaveTo(href); // on failure, the error is showing and the edits are still on the page
+});
+
+document.getElementById("unsaved-discard-btn").addEventListener("click", () => leaveTo(pendingBackHref));
+document.getElementById("unsaved-stay-btn").addEventListener("click", closeUnsavedModal);
+document.getElementById("unsaved-modal").addEventListener("click", (e) => {
+  if (e.target.id === "unsaved-modal") closeUnsavedModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeUnsavedModal();
+});
+
+// The other ways off the page (nav tabs, refresh, closing the tab) can only use
+// the browser's own prompt.
+window.addEventListener("beforeunload", (e) => {
+  if (!leavingPage && hasUnsavedChanges()) e.preventDefault();
+});
 
 async function saveTarget(target) {
   const refs = targetRowRefs[target] || [];
@@ -822,7 +976,11 @@ async function saveTarget(target) {
     entries.push({ values: ref.group.values, target_value: value, method, flag: ref.flag, notes: ref.notes });
   }
 
-  if (!entries.length) return true; // nothing changed on this tab — not an error, just nothing to send
+  if (!entries.length) {
+    // Nothing changed on this tab — not an error, just nothing to send.
+    markRowsSaved(refs);
+    return true;
+  }
 
   try {
     const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
@@ -843,6 +1001,7 @@ async function saveTarget(target) {
   for (const ref of refs) {
     if (rowValue(ref)) ref.group.confidence = "saved";
   }
+  markRowsSaved(refs);
   updateTabStatus(target);
   return true;
 }
@@ -873,22 +1032,22 @@ async function saveSourceNotes() {
   return true;
 }
 
-// Saves every tab, not just the active one — for the plain "Save" button,
-// which is a checkpoint (stays on this page) rather than "I'm done with
-// this tab" (save-next-btn/save-back-btn, which only ever touched the
-// active tab since that's all a reviewer had necessarily finished). Stops
-// at the first failure rather than saving the rest out of order, same
-// fail-fast behavior saveTarget already has for a single tab.
-async function saveAllTargets() {
+// Saves every tab opened on this page load, so an edit on an earlier tab isn't
+// lost. An unopened tab is left alone: its rows are pre-filled with suggestions
+// nobody has reviewed, and saving those would mark the tab complete. Stops at
+// the first failure, same fail-fast behavior saveTarget has for a single tab.
+async function saveVisitedTargets() {
   for (const target of allTargetNames) {
+    if (!visitedTargets.has(target)) continue;
     const ok = await saveTarget(target);
     if (!ok) return false;
   }
   return true;
 }
 
+// A flagged source is waiting on something outside this tool, so "next" skips it.
 function isIncomplete(s) {
-  return s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
+  return !s.flagged && s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
 }
 
 async function loadClassifiedCount() {
@@ -944,6 +1103,8 @@ async function load() {
 
   const container = document.getElementById("targets");
   container.innerHTML = "";
+  valueLabels = data.value_labels || {};
+  dataDictionaryUrl = data.data_dictionary_url || "";
   allTargetNames = Object.keys(data.targets);
   for (const target of allTargetNames) {
     targetDataByName[target] = data.targets[target];
@@ -952,6 +1113,8 @@ async function load() {
 
   savedSourceNotes = data.source_notes || "";
   document.getElementById("source-notes").value = savedSourceNotes;
+  sourceFlagged = !!data.source_flagged;
+  updateFlagNextButton();
   document.getElementById("source-notes-wrap").classList.remove("hidden");
 
   renderTabs(allTargetNames);
@@ -964,48 +1127,90 @@ async function load() {
   });
   setActiveTarget(firstIncomplete || allTargetNames[0]);
 
+  for (const refs of Object.values(targetRowRefs)) markRowsSaved(refs);
+
   loadClassifiedCount();
 }
 
-// Checkpoint: saves every tab's in-progress edits (not just the active
-// one) and stays right here — for a source complicated enough to span
-// several tabs before any one of them feels "done" (see saveAllTargets).
-document.getElementById("save-btn").addEventListener("click", async () => {
-  setSaving(true, "Saving…");
-  const ok = (await saveSourceNotes()) && (await saveAllTargets());
-  if (ok) setSaving(false, "Saved ✓"); // on failure, the error is already showing
-});
+function updateFlagNextButton() {
+  document.getElementById("flag-next-btn").textContent = sourceFlagged ? "\u2691 Remove flag" : "\u2691 Flag & next";
+}
 
-// Saves the active tab, then advances: to the next tab still needing work
-// on this source if there is one, otherwise to the next source (or home).
-document.getElementById("save-next-btn").addEventListener("click", async () => {
-  setSaving(true, "Saving…");
-  const ok = (await saveSourceNotes()) && (await saveTarget(activeTarget));
-  if (!ok) return;
-
-  const nextTarget = findNextIncompleteTarget(activeTarget);
-  if (nextTarget) {
-    setActiveTarget(nextTarget);
-    setSaving(false, "Saved ✓");
-    return;
+async function saveSourceFlag(flagged) {
+  try {
+    const res = await fetch(`api/classification/${encodeURIComponent(sourceId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_flagged: flagged }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setSaving(false, data.error || "Failed to save");
+      return false;
+    }
+  } catch (e) {
+    setSaving(false, `Something went wrong: ${e}`);
+    return false;
   }
+  sourceFlagged = flagged;
+  updateFlagNextButton();
+  return true;
+}
 
-  setSaving(true, "Finding next source…");
+async function goToNextSource() {
+  setSaving(true, "Finding next source\u2026");
   const nextSourceId = await findNextSource(sourceId, "api/sources", isIncomplete);
   if (nextSourceId) {
     location.href = `review.html?id=${encodeURIComponent(nextSourceId)}`;
   } else {
     goHome();
   }
+}
+
+// Checkpoint: saves and stays right here, for a source complicated enough to
+// span several tabs before any one of them feels "done".
+document.getElementById("save-btn").addEventListener("click", async () => {
+  setSaving(true, "Saving\u2026");
+  const ok = (await saveSourceNotes()) && (await saveVisitedTargets());
+  if (ok) setSaving(false, "Saved \u2713"); // on failure, the error is already showing
 });
 
-// Saves the active tab first, then leaves — same "don't silently drop
-// unsaved edits on the way out" reasoning as Save & next above.
-document.getElementById("save-back-btn").addEventListener("click", async () => {
-  setSaving(true, "Saving…");
-  const ok = (await saveSourceNotes()) && (await saveTarget(activeTarget));
+// Saves, then advances: to the next tab still needing work on this source if
+// there is one, otherwise to the next source (or home).
+document.getElementById("save-next-btn").addEventListener("click", async () => {
+  setSaving(true, "Saving\u2026");
+  const ok = (await saveSourceNotes()) && (await saveVisitedTargets());
   if (!ok) return;
-  goHome();
+
+  const nextTarget = findNextIncompleteTarget(activeTarget);
+  if (nextTarget) {
+    setActiveTarget(nextTarget);
+    setSaving(false, "Saved \u2713");
+    return;
+  }
+  await goToNextSource();
+});
+
+// Parks the source until something outside this tool is resolved, e.g. a reply
+// from the municipality. The source note is required so the reason is on record.
+// On an already-flagged source this is the way back, and it stays on the page.
+document.getElementById("flag-next-btn").addEventListener("click", async () => {
+  if (sourceFlagged) {
+    setSaving(true, "Removing flag\u2026");
+    if (await saveSourceFlag(false)) setSaving(false, "Flag removed \u2713");
+    return;
+  }
+
+  const notes = document.getElementById("source-notes");
+  if (!notes.value.trim()) {
+    notes.focus();
+    setSaving(false, "Add a source note saying why this is flagged");
+    return;
+  }
+
+  setSaving(true, "Flagging\u2026");
+  const ok = (await saveSourceNotes()) && (await saveVisitedTargets()) && (await saveSourceFlag(true));
+  if (ok) await goToNextSource();
 });
 
 load();

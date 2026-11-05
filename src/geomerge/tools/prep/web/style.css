@@ -86,6 +86,7 @@ td a {
   white-space: nowrap;
 }
 
+.review-marker-flagged,
 .review-marker-unsure {
   border-color: var(--ctp-yellow);
   color: var(--ctp-yellow);

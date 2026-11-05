@@ -142,6 +142,10 @@ textarea {
   background: color-mix(in srgb, var(--ctp-red) 12%, var(--color-panel-bg));
 }
 
+.unsaved-modal-panel {
+  max-width: 480px;
+}
+
 .flag-options {
   display: flex;
   gap: 1rem;
@@ -218,6 +222,69 @@ th, td {
   overflow-wrap: anywhere;
 }
 
+/* What a coded raw value means (value_labels.yaml), under the value itself. */
+.value-label {
+  display: block;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--ctp-blue);
+  cursor: pointer;
+}
+
+.value-label:hover {
+  background: none;
+  color: var(--ctp-blue);
+  text-decoration: underline;
+}
+
+/* The popup has a caveat from the provider worth reading. */
+.value-label.has-notes {
+  text-decoration: underline dotted;
+}
+
+.value-label-popup {
+  position: fixed;
+  z-index: 50;
+  max-width: 360px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.value-label-popup.hidden {
+  display: none;
+}
+
+.value-label-popup-key,
+.value-label-popup-basis {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.value-label-popup-label {
+  font-weight: 600;
+}
+
+.value-label-popup-notes {
+  font-style: italic;
+}
+
+.value-label-popup a {
+  color: var(--ctp-blue);
+}
+
 th {
   background: var(--ctp-surface0);
   position: sticky;
@@ -258,21 +325,21 @@ input[type="text"] {
   font-size: 0.85rem;
 }
 
-#save-back-btn {
+#flag-next-btn {
   padding: 0.3rem 0.85rem;
   font-size: 0.85rem;
   font-weight: 600;
   border-radius: 6px;
-  border: 1px solid var(--ctp-mauve);
+  border: 1px solid var(--ctp-yellow);
   background: var(--color-panel-bg);
-  color: var(--ctp-mauve);
+  color: var(--ctp-yellow);
 }
 
-#save-back-btn:hover {
-  background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
+#flag-next-btn:hover {
+  background: color-mix(in srgb, var(--ctp-yellow) 18%, var(--color-panel-bg));
 }
 
-#save-back-btn:disabled,
+#flag-next-btn:disabled,
 #save-next-btn:disabled {
   background: var(--ctp-surface1);
   border-color: var(--ctp-surface1);
