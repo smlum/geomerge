@@ -55,6 +55,21 @@
   text-decoration: underline;
 }
 
+/* Status pill wrapped in a link to that stage's page — the trailing ↗ is
+   the only link-coloured part; the pill keeps its own status colours. */
+.source-card-row-value a.source-card-stage-link {
+  color: var(--color-text-secondary);
+}
+
+.source-card-row-value a.source-card-stage-link:hover {
+  color: var(--ctp-mauve);
+  text-decoration: none;
+}
+
+.source-card-stage-link:hover .source-card-status {
+  outline: 1px solid currentColor;
+}
+
 .source-card-empty {
   font-size: 0.85rem;
   color: var(--color-text-secondary);

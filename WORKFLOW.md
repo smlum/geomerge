@@ -154,6 +154,32 @@ from driving the initial per-source assignment above.
 **Notes**
 - Source class may need multiple source columns combined to assign one target class (not always a single 1:1 column)
 - May need to classify more than one target attribute — e.g. Can-BICS class and surface material/type — not just one
+- **Idea, not committed to — reference-network enrichment.** A recurring gap: a source's own
+  attributes often can't separate classes that differ only in context it doesn't record —
+  MUP vs gravel path with no surface column, local vs major shared lane (or shared lane vs
+  local street bikeway) with no road class/speed/traffic-calming info (e.g. Montreal's
+  "Chaussée désignée", "Sentier polyvalent"). Possible fix: a step that matches each segment
+  to a reference network (OpenStreetMap; maybe NRN for road class) and adds derived columns
+  — e.g. `ref_surface` (paved/unpaved/unknown), `ref_road_class` (local/collector/arterial),
+  maybe `ref_maxspeed` / nearby traffic-calming count — configurable as extra classification
+  `source_columns` so review groups split on them. Open questions: geometry matching
+  (offset paths, cycle tracks beside the road — buffer + bearing), bucketing to keep group
+  counts sane, and that adding columns re-keys every group, so affected sources' saved
+  classifications need re-review.
+- **Idea, not committed to — derived columns from a source's own attributes.** Lighter-weight
+  complement to the above, for when the signal *is* in the source but not in a usable shape:
+  - *Keyword buckets from a free-text column* — e.g. Ville de Québec's single "Piste cyclable"
+    type covers cycle tracks, off-street paths and MUPs, but its route name (`NOM_TOPOGRAPHIE`,
+    ~160 unique) says which: "Corridor …", "Parc …", "Piste cyclo-piétonne …" vs street names.
+    Mapping the raw name as `source_class_secondary` explodes groups (~480 across all types);
+    bucketing it first (`mup` / `corridor` / `park` / default `street`, matched with the same
+    accent-folding substring rules as `helpers/matching.py`) gives ~12.
+  - *Combining boolean flag columns* — e.g. York Region's CYCLING / PEDESTRIAN_ONLY /
+    SHARED_USE / MTN_BIKE into one `COL=VALUE; …` secondary value (normalizing TRUE/True/blank).
+    Turned out redundant for York itself, but the pattern recurs.
+  Sketch: a `derived:` (buckets) / `combined:` (flags) block in `column_map.yaml`, applied by
+  the column_map step, with the input columns counted as accounted-for. Same re-keying caveat
+  as above.
 
 ## 5. Data processing
 

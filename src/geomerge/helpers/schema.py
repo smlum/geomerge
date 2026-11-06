@@ -11,3 +11,11 @@ def get_field(schema_path: Path, field_name: str) -> dict:
         if field["name"] == field_name:
             return field
     raise ValueError(f"{schema_path} has no field named '{field_name}'")
+
+
+def is_required(schema_path: Path, field_name: str) -> bool:
+    """The field's `required` flag; False for a field the schema doesn't define."""
+    try:
+        return bool(get_field(schema_path, field_name).get("required", False))
+    except ValueError:
+        return False

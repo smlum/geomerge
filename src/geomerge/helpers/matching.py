@@ -4,10 +4,19 @@ name variants) is supplied by the caller, not baked in here, so this is
 reusable for column mapping now and classification later."""
 
 import re
+import unicodedata
 
 
 def normalize(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", name.lower())
+    """Lowercase, fold accents to their base letter, then strip everything
+    that isn't a-z/0-9 — so "Chaussée désignée" and a rule term "chaussee
+    designee" normalize identically. Accents are decomposed (NFD) and their
+    combining marks dropped *before* the non-alphanumeric strip; otherwise
+    the strip would delete "é" outright ("chausse") rather than reduce it
+    to "e". Same folding as collection/web/server.py's search."""
+    decomposed = unicodedata.normalize("NFD", name.lower())
+    folded = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", "", folded)
 
 
 def match_name(raw_name: str, aliases: dict) -> tuple:
@@ -57,18 +66,24 @@ def match_name(raw_name: str, aliases: dict) -> tuple:
     if not normalized_raw:
         return None, "none"
 
+    # Rules files are hand-edited too, not just written by the editors: a
+    # key left empty (`excludes_contains:` with nothing after it, or a
+    # target/value with no buckets at all) loads as None, not [] / {} —
+    # treat both as empty rather than crashing every suggestion.
+    aliases = {target: rules or {} for target, rules in aliases.items()}
+
     def excluded(rules: dict) -> bool:
-        if any(normalize(term) == normalized_raw for term in rules.get("excludes", [])):
+        if any(normalize(term) == normalized_raw for term in (rules.get("excludes") or [])):
             return True
         return any(
             normalize(term) and normalize(term) in normalized_raw
-            for term in rules.get("excludes_contains", [])
+            for term in (rules.get("excludes_contains") or [])
         )
 
     for target, rules in aliases.items():
         if excluded(rules):
             continue
-        exact_terms = [target, *rules.get("exact", []), *rules.get("contains", [])]
+        exact_terms = [target, *(rules.get("exact") or []), *(rules.get("contains") or [])]
         if any(normalize(term) == normalized_raw for term in exact_terms):
             return target, "exact"
 
@@ -77,7 +92,7 @@ def match_name(raw_name: str, aliases: dict) -> tuple:
     for target, rules in aliases.items():
         if excluded(rules):
             continue
-        for term in rules.get("contains", []):
+        for term in (rules.get("contains") or []):
             normalized_term = normalize(term)
             if normalized_term and normalized_term in normalized_raw and len(normalized_term) > best_len:
                 best_target = target

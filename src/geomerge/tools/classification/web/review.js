@@ -544,6 +544,13 @@ function renderGroupRow(target, group, columns, options, streetViewEnabled, show
     }
     tr.appendChild(td);
   }
+  if (!columns.length) {
+    const td = document.createElement("td");
+    td.className = "meta value-cell";
+    td.textContent = "(all rows)";
+    td.title = "This source has none of this target's columns, so one class applies to every row";
+    tr.appendChild(td);
+  }
 
   const countTd = document.createElement("td");
   countTd.className = "meta";
@@ -685,7 +692,7 @@ const targetRowRefs = {}; // target -> [{group, field, filterOutCheckbox, ignore
 // rather than a second request — status.py's version exists for /api/sources,
 // which needs it for every source at once, not just the one open here.
 function computeTargetStatus(targetData) {
-  if (!targetData.source_columns.length || !targetData.groups.length) return "not_applicable";
+  if (!targetData.groups.length) return "not_applicable";
   const covered = targetData.groups.filter((g) => g.confidence === "saved").length;
   if (covered === 0) return "not_started";
   return covered === targetData.groups.length ? "complete" : "needs_review";
@@ -705,7 +712,10 @@ function renderTargetSection(target, targetData) {
   section.className = "target-section hidden";
   section.dataset.target = target;
 
-  if (!targetData.source_columns.length) {
+  // No groups = not applicable. No columns but one group = a required
+  // target's whole-source "all rows" group (see status.py's
+  // is_whole_source_target), rendered with one "(all rows)" value cell.
+  if (!targetData.groups.length) {
     const note = document.createElement("div");
     note.className = "meta target-na-note";
     note.textContent = "Not applicable — none of this target's configured source columns exist for this source.";
@@ -719,7 +729,7 @@ function renderTargetSection(target, targetData) {
   const colgroup = document.createElement("colgroup");
   // No width on the raw value columns: they share whatever the fixed ones
   // below leave, and long values wrap rather than forcing a side-scroll.
-  for (const _ of columns) {
+  for (let i = 0; i < Math.max(columns.length, 1); i++) {
     colgroup.appendChild(document.createElement("col"));
   }
   for (const width of ["70px", "345px"]) {
@@ -748,6 +758,12 @@ function renderTargetSection(target, targetData) {
     const th = document.createElement("th");
     th.className = "value-cell";
     th.textContent = col;
+    headRow.appendChild(th);
+  }
+  if (!columns.length) {
+    const th = document.createElement("th");
+    th.className = "value-cell";
+    th.textContent = "No class column";
     headRow.appendChild(th);
   }
   for (const label of ["Count", "Target"]) {

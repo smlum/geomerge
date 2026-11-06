@@ -13,9 +13,11 @@ canbics_class also drives classification_method/classification_notes
 one every published segment must have.
 """
 
+import pandas as pd
 import yaml
 
 from geomerge.helpers.constants import IGNORED, NOT_INCLUDED
+from geomerge.helpers.schema import is_required
 
 
 def _stringify(value) -> str:
@@ -38,7 +40,11 @@ def apply(data, *, source_id: str, config: dict):
     for target, target_config in targets.items():
         source_columns = [c for c in target_config["source_columns"] if c in data.columns]
 
-        if not source_columns:
+        # No source columns: skipped, unless the target schema marks the
+        # target required — then the review UI offered a single whole-source
+        # "all rows" group, saved as a mapping with values {}, applied below
+        # to every row via the empty key ().
+        if not source_columns and not is_required(repo_root / config["target_schema"], target):
             if target == "status":
                 # schema/ccnd.yaml: "Absent means the source doesn't
                 # distinguish status (treated as existing)."
@@ -55,7 +61,10 @@ def apply(data, *, source_id: str, config: dict):
             method_lookup[key] = m.get("method", "manual")
             notes_lookup[key] = m.get("notes", "")
 
-        keys = data.apply(lambda row: tuple(_stringify(row[c]) for c in source_columns), axis=1)
+        if source_columns:
+            keys = data.apply(lambda row: tuple(_stringify(row[c]) for c in source_columns), axis=1)
+        else:
+            keys = pd.Series([()] * len(data), index=data.index, dtype=object)
         data[target] = keys.map(target_lookup)
 
         if target == "canbics_class":
@@ -64,9 +73,10 @@ def apply(data, *, source_id: str, config: dict):
 
         unmapped = int(data[target].isna().sum())
         if unmapped:
+            what = f"their {source_columns} combination" if source_columns else "this source's all-rows group"
             warnings.append(
-                f"{unmapped} row(s) have no {target} mapping for their {source_columns} "
-                "combination — run 'geomerge tools classification review'"
+                f"{unmapped} row(s) have no {target} mapping for {what} "
+                "— run 'geomerge tools classification review'"
             )
 
         target_excluded = data[target] == NOT_INCLUDED

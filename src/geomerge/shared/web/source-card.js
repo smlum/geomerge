@@ -2,9 +2,9 @@
 // metadata.yaml fields plus a full per-stage status summary (the same
 // shape home's own dashboard rows use), opened by clicking a source id
 // wherever one appears: home/prep's tables, column_mapping's header.
-// Read-only for now, deliberately — this spans every stage at once rather
-// than owning one file, so there's no single "edit" action to jump to the
-// way home's own YAML-preview modals have.
+// Read-only itself — this spans every stage at once rather than owning one
+// file, so there's no single "edit" action; instead each stage's status
+// pill links (new tab) to that stage's own page for this source.
 //
 // Loaded via an absolute <script src="/source-card.js">, same reasoning as
 // nav.js/rule-editor.js/file-preview.js: one copy, not one per tool. Expects
@@ -15,13 +15,18 @@
 // tables) since this modal has to render identically no matter which page
 // opened it, not depend on whatever the host page happens to already define.
 
+// href: where that stage's pill links to (new tab, so jumping back to e.g.
+// column mapping mid-classification never costs the current page's unsaved
+// state). Per-source deep links where the page supports one (collection's
+// ?id= opens that source's metadata modal); the stage's dashboard
+// otherwise. Validation has nothing to show yet, so no link.
 const SOURCE_CARD_STAGES = [
-  { label: "Metadata", path: ["collection", "metadata"] },
-  { label: "Raw data file", path: ["collection", "raw"] },
-  { label: "Column mapping", path: ["tools", "column_mapping"] },
-  { label: "Preprocessing", path: ["tools", "preprocessing"] },
-  { label: "Classification", path: ["tools", "classification"] },
-  { label: "Processing", path: ["pipeline", "processing"] },
+  { label: "Metadata", path: ["collection", "metadata"], href: (id) => `/collection/?id=${encodeURIComponent(id)}` },
+  { label: "Raw data file", path: ["collection", "raw"], href: (id) => `/collection/?id=${encodeURIComponent(id)}` },
+  { label: "Column mapping", path: ["tools", "column_mapping"], href: (id) => `/column-mapping/map.html?id=${encodeURIComponent(id)}` },
+  { label: "Preprocessing", path: ["tools", "preprocessing"], href: () => "/prep/" },
+  { label: "Classification", path: ["tools", "classification"], href: (id) => `/classification/review.html?id=${encodeURIComponent(id)}` },
+  { label: "Processing", path: ["pipeline", "processing"], href: () => "/pipeline/" },
   { label: "Validation", path: ["pipeline", "validation"] },
 ];
 
@@ -133,7 +138,16 @@ async function openSourceCard(sourceId) {
   for (const stage of SOURCE_CARD_STAGES) {
     const status = getPath(data, stage.path);
     if (status == null) continue;
-    statusSection.appendChild(sourceCardRow(stage.label, sourceCardStatusBadge(status)));
+    let node = sourceCardStatusBadge(status);
+    if (stage.href) {
+      const link = sourceCardExternalLink(stage.href(sourceId), "");
+      link.className = "source-card-stage-link";
+      link.title = `Open ${stage.label.toLowerCase()} in a new tab`;
+      link.appendChild(node);
+      link.appendChild(document.createTextNode(" ↗"));
+      node = link;
+    }
+    statusSection.appendChild(sourceCardRow(stage.label, node));
   }
   body.appendChild(statusSection);
 }

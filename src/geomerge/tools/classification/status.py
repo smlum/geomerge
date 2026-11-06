@@ -83,15 +83,37 @@ def _read_combos(path: Path, columns: tuple) -> list:
     return unique_combos(pd.read_parquet(path, columns=list(columns)), list(columns))
 
 
+def _read_row_count(path: Path) -> int:
+    return pq.read_metadata(path).num_rows
+
+
+def is_whole_source_target(target: str, config: dict) -> bool:
+    """A target the target schema marks required (e.g. canbics_class) can't
+    just be skipped for a source that has none of its source columns —
+    every output row needs a value. Such a source instead gets one
+    whole-source "all rows" group (values {}) to classify."""
+    # Cached read (not helpers.schema's get_field) — this runs for every
+    # source × target on each dashboard load.
+    fields = cached_yaml(config["repo_root"] / config["target_schema"]).get("fields", [])
+    return any(f.get("name") == target and f.get("required") for f in fields)
+
+
 def columns_and_combos(source_id: str, target: str, config: dict) -> tuple:
     """(present columns, unique_combos) for one target, without loading the
     parquet's geometry, and cached until the parquet changes. The combos are
-    shared between callers — treat them as read-only."""
+    shared between callers — treat them as read-only.
+
+    No present columns: no combos (target not_applicable), unless the target
+    is required — then a single all-rows combo, see is_whole_source_target."""
     path = preprocessed_path(source_id, config)
     source_columns = config["tools"]["classification"]["targets"][target]["source_columns"]
     names = cached_read(path, _read_column_names)
     columns = [c for c in source_columns if c in names]
-    return columns, cached_read(path, _read_combos, tuple(columns)) if columns else []
+    if columns:
+        return columns, cached_read(path, _read_combos, tuple(columns))
+    if is_whole_source_target(target, config):
+        return columns, [{"values": {}, "count": cached_read(path, _read_row_count)}]
+    return columns, []
 
 
 def _read_network(path: Path, columns: tuple, values: tuple) -> dict:

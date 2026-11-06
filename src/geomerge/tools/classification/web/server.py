@@ -166,12 +166,17 @@ def create_blueprint(config: dict = None) -> Blueprint:
             options = target_options(target)
             street_view = bool(target_config.get("street_view", False))
 
-            if not columns:
+            # No combos = not applicable. No columns but one combo = a required
+            # target's whole-source "all rows" group (see status.py's
+            # is_whole_source_target) — reviewed like any other group.
+            if not combos:
                 result[target] = {"source_columns": [], "options": options, "street_view": street_view, "groups": []}
                 continue
 
             mappings = saved.get(target, {}).get("mappings", [])
-            show_prior_year = target == prior_year_target
+            # The prior-year dictionary is keyed on the first source column's
+            # value, so there's nothing to look up for an all-rows group.
+            show_prior_year = target == prior_year_target and bool(columns)
             groups = []
             for combo in combos:
                 prior_year_match = prior_year_map.get(normalize(combo["values"].get(columns[0], ""))) if show_prior_year else None
@@ -281,7 +286,9 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 method = item.get("method") or "manual"
                 notes = (item.get("notes") or "").strip()
                 flag = item.get("flag")
-                if not values or not target_value:
+                # values {} is a real entry — the all-rows group for a source
+                # with none of the target's columns — so only None is skipped.
+                if values is None or not target_value:
                     continue
 
                 entry = {"values": values, "target": target_value, "method": method}
