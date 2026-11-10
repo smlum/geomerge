@@ -55,18 +55,13 @@ def source_status(source_id: str, config: dict) -> dict:
     has_column_map = column_map_path.exists()
 
     status = NOT_STARTED
-    flagged = False
     if has_column_map:
         column_map = cached_yaml(column_map_path)
-        flagged = bool(column_map.get("flagged", False))
+        assigned = list(column_map.get("column_map", {}).values())
         accounted = set(column_map.get("column_map", {})) | set(column_map.get("dropped", []))
-        if flagged:
-            # A source explicitly flagged "revisit later" must never read as
-            # complete, even if every raw column happens to already be
-            # accounted for (e.g. a collision left unresolved on purpose) —
-            # otherwise it'd silently drop out of the "still needs work" pool
-            # that findNextSourcePreferUnflagged (map.js) relies on to surface
-            # it again once nothing unflagged is left.
+        if len(assigned) != len(set(assigned)):
+            # A target assigned to more than one column — only savable via
+            # Flag & next (see server.py), and never complete until resolved.
             status = NEEDS_REVIEW
         elif has_data:
             try:
@@ -84,5 +79,6 @@ def source_status(source_id: str, config: dict) -> dict:
         "raw_filename": raw_filename,
         "format": fmt,
         "column_map_status": status,
-        "flagged": flagged,
+        # The source's shared flag (metadata.yaml) — see helpers/source_notes.py.
+        "flagged": bool(metadata.get("flagged", False)),
     }

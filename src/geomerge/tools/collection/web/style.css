@@ -189,6 +189,11 @@ tr.flagged-row {
   background: color-mix(in srgb, var(--ctp-yellow) 15%, var(--color-panel-bg)) !important;
 }
 
+/* The row a ?provider= deep link landed on (see app.js's openFromQueryParam). */
+tr.linked-row td {
+  box-shadow: inset 0 2px 0 var(--ctp-mauve), inset 0 -2px 0 var(--ctp-mauve);
+}
+
 textarea.notes-input {
   display: block;
   width: 100%;

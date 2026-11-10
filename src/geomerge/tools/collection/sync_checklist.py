@@ -5,9 +5,9 @@ Generic — not cycling-specific, reusable as-is by a future project.
 
 name/portal_url/geography_level/province are informational, refreshed from
 providers.csv on every run (edits to them here are overwritten — go fix
-providers.csv instead). prior_url/source_url/checked/checked_date/source_ids/
-notes are the actual working state and are preserved across runs, matched by
-provider_id — one row per provider, always; a provider with more than one
+providers.csv instead). Every other column (prior_url, source_url, checked,
+notes, flagged, contact, ...) is the actual working state and is preserved
+across runs, matched by provider_id — one row per provider, always; a provider with more than one
 relevant dataset gets multiple source_ids (comma-separated) on that same
 row, not a duplicate row. See the collection web UI's metadata modal
 ("+ Add another source") for creating those.
@@ -28,10 +28,16 @@ import pandas as pd
 
 from geomerge.helpers.config import load_config
 
-WORK_COLUMNS = ["prior_url", "source_url", "checked", "checked_date", "source_ids", "notes"]
+# Refreshed from providers.csv on every run. Every other column already in
+# checklist.csv is working state and is carried over as-is — including ones
+# added later by the collection UI (flagged, contact, portal_license_*),
+# which an explicit allowlist here used to silently drop.
+INFO_COLUMNS = ["name", "portal_url", "geography_level", "province"]
+# Guaranteed present even in a brand-new or older checklist.
+WORK_COLUMNS = ["prior_url", "source_url", "checked", "checked_date", "source_ids", "notes", "flagged"]
 COLUMN_ORDER = [
     "checked", "provider_id", "portal_url", "prior_url", "source_url",
-    "name", "geography_level", "province", "checked_date", "source_ids", "notes",
+    "name", "geography_level", "province", "checked_date", "source_ids", "notes", "flagged",
 ]
 
 
@@ -46,12 +52,15 @@ def main(argv=None):
     providers = pd.read_csv(args.providers_csv, dtype=str).fillna("")
     info = providers[["provider_id", "name", "portal_url", "geography_level", "province", "population_2021"]]
 
+    column_order = list(COLUMN_ORDER)
     if args.checklist_csv.exists():
         prior = pd.read_csv(args.checklist_csv, dtype=str).fillna("")
         for col in WORK_COLUMNS:  # tolerate an older checklist missing a newly-added column
             if col not in prior.columns:
                 prior[col] = ""
-        work = prior[["provider_id", *WORK_COLUMNS]]
+        work = prior.drop(columns=[c for c in INFO_COLUMNS if c in prior.columns])
+        # The existing file's own column order, plus anything it's missing.
+        column_order = list(prior.columns) + [c for c in COLUMN_ORDER if c not in prior.columns]
     else:
         work = pd.DataFrame(columns=["provider_id", *WORK_COLUMNS])
 
@@ -77,7 +86,7 @@ def main(argv=None):
         .drop(columns=["_tier", "_population", "population_2021"])
         .reset_index(drop=True)
     )
-    checklist = checklist[COLUMN_ORDER]
+    checklist = checklist[column_order]
 
     args.checklist_csv.parent.mkdir(parents=True, exist_ok=True)
     checklist.to_csv(args.checklist_csv, index=False)

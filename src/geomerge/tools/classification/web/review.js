@@ -1061,9 +1061,15 @@ async function saveVisitedTargets() {
   return true;
 }
 
-// A flagged source is waiting on something outside this tool, so "next" skips it.
 function isIncomplete(s) {
-  return !s.flagged && s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
+  return s.has_preprocessed_data && Object.values(s.targets).some((t) => t !== "complete" && t !== "not_applicable");
+}
+
+// A flagged source often waits on something outside this tool, so "next"
+// prefers unflagged ones — but still reaches flagged ones once those run out,
+// since a flag (e.g. "check for newer data") doesn't stop classifying.
+function isIncompleteUnflagged(s) {
+  return !s.flagged && isIncomplete(s);
 }
 
 async function loadClassifiedCount() {
@@ -1175,7 +1181,9 @@ async function saveSourceFlag(flagged) {
 
 async function goToNextSource() {
   setSaving(true, "Finding next source\u2026");
-  const nextSourceId = await findNextSource(sourceId, "api/sources", isIncomplete);
+  const nextSourceId =
+    (await findNextSource(sourceId, "api/sources", isIncompleteUnflagged)) ||
+    (await findNextSource(sourceId, "api/sources", isIncomplete));
   if (nextSourceId) {
     location.href = `review.html?id=${encodeURIComponent(nextSourceId)}`;
   } else {

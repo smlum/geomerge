@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}explore{% endblock %}
+
+{% block body_class %} class="explore-page"{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="style.css" />
+{% endblock %}
+
+{% block header_content %}
+  <div class="title-block">
+    <h1>Explore</h1>
+    <div id="data-label" class="meta"></div>
+  </div>
+  <!-- Sub-views — Map and Table are planned (WORKFLOW.md §7), shown so the
+       shape of the tab is visible; Compare will be its own top-level tab. -->
+  <nav class="subnav" aria-label="Explore views">
+    <a href="/explore/" class="subnav-item active">Overview</a>
+    <span class="subnav-item disabled" title="Planned — see WORKFLOW.md §7">Map</span>
+    <span class="subnav-item disabled" title="Planned — see WORKFLOW.md §7">Table</span>
+  </nav>
+{% endblock %}
+
+{% block content %}
+  <div id="error" class="error hidden"></div>
+
+  <!-- Active filters (overview.js's renderFilterBar) — click any province,
+       provider or source on the page to add one. -->
+  <div id="filters" class="filter-bar hidden"></div>
+
+  <section id="headline" class="tiles" aria-label="Headline numbers"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Breakdown</h2>
+      <div class="controls">
+        <label>By <select id="geo-select"></select></label>
+        <label>Field <select id="field-select"></select></label>
+        <div class="segmented" role="group" aria-label="Bar length">
+          <button type="button" data-bars="share" class="active" title="Every bar full width — compare the mix">share</button>
+          <button type="button" data-bars="absolute" title="Bar length ∝ total — compare size">absolute</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel-scroll">
+      <table id="breakdown-table" class="data-table"></table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Sources</h2>
+      <div class="meta">Click a column to sort · outliers in km or segment length are worth a look</div>
+    </div>
+    <div class="panel-scroll">
+      <table id="sources-table" class="data-table"></table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Columns</h2>
+      <div class="meta">Filled = share of rows / of km with a value · expand a row for its top values</div>
+    </div>
+    <div class="panel-scroll">
+      <table id="profile-table" class="data-table"></table>
+    </div>
+  </section>
+
+  <div id="tooltip" class="chart-tooltip hidden" role="tooltip"></div>
+{% endblock %}
+
+{% block footer %}
+  <span id="footer-stats" class="meta"></span>
+{% endblock %}
+
+{% block scripts %}
+  <script src="overview.js"></script>
+{% endblock %}

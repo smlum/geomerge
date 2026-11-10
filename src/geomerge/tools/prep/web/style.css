@@ -96,3 +96,46 @@ td a {
   border-color: var(--ctp-red);
   color: var(--ctp-red);
 }
+
+/* Classification can't start yet (flagged upstream, or mapping/preprocessing
+   not done) — a prep-page-only state, see server.py's blocked_reason. A
+   button, since clicking it explains why (app.js's openBlockedModal). */
+.status-blocked {
+  background: color-mix(in srgb, var(--ctp-peach) 20%, var(--color-panel-bg));
+  color: var(--ctp-peach);
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.status-blocked:hover {
+  outline: 1px solid currentColor;
+}
+
+.blocked-modal-panel {
+  max-width: 520px;
+}
+
+.blocked-note {
+  white-space: pre-wrap;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--ctp-peach);
+  background: var(--color-page-bg);
+  margin: 0.75rem 0;
+}
+
+.blocked-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.blocked-actions a {
+  color: var(--ctp-mauve);
+  text-decoration: none;
+}
+
+.blocked-actions a:hover {
+  text-decoration: underline;
+}

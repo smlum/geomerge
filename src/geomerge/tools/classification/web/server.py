@@ -33,6 +33,7 @@ from geomerge.helpers.constants import IGNORED, NOT_INCLUDED, REVIEW_FLAGS
 from geomerge.helpers.geo_sampling import sample_points
 from geomerge.helpers.matching import match_name, normalize
 from geomerge.helpers.schema import get_field
+from geomerge.helpers.source_notes import source_markers, update_source_markers
 from geomerge.tools.classification.prior_year import prior_year_lookup
 from geomerge.tools.classification.status import (
     cached_network,
@@ -148,7 +149,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
             return jsonify({"error": f"no preprocessed data for {source_id} — run 'geomerge pipeline preprocessing' first"}), 404
         if not is_eligible(source_id, config):
             return jsonify({
-                "error": f"{source_id} is flagged, or column mapping/preprocessing isn't complete yet — "
+                "error": f"column mapping/preprocessing isn't complete yet for {source_id} — "
                          "resolve that before classifying"
             }), 409
 
@@ -220,10 +221,13 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 "groups": groups,
             }
 
+        markers = source_markers(source_id, config)
         return jsonify({
             "source_id": source_id,
-            "source_notes": saved.get("notes", ""),
-            "source_flagged": bool(saved.get("flagged", False)),
+            # The source's one shared note and flag (metadata.yaml), not
+            # classification-only — see helpers/source_notes.py.
+            "source_notes": markers["notes"],
+            "source_flagged": markers["flagged"],
             "value_labels": load_value_labels(source_id, config),
             # For the value label popup's link -- metadata.yaml stays the one
             # place a source's dictionary URL is recorded.
@@ -238,13 +242,13 @@ def create_blueprint(config: dict = None) -> Blueprint:
     # left blank is simply omitted by the client rather than sent with an
     # empty target_value, so this endpoint doesn't need to distinguish
     # "explicitly cleared" from "never touched" — see review.js's save flow.
-    # "source_notes", when present, replaces the file's top-level `notes`, and
-    # can be sent without any entries. "source_flagged" likewise sets or clears
-    # the top-level `flagged`, which only makes "next" skip the source.
+    # "source_notes" / "source_flagged", when present, set the source's shared
+    # note and flag in metadata.yaml (helpers/source_notes.py), and can be
+    # sent without any entries — classification_map.yaml is then left alone.
     @bp.route("/api/classification/<source_id>", methods=["POST"])
     def api_classification_save(source_id):
         if not is_eligible(source_id, config):
-            return jsonify({"error": f"{source_id} is flagged, or column mapping/preprocessing isn't complete yet"}), 409
+            return jsonify({"error": f"column mapping/preprocessing isn't complete yet for {source_id}"}), 409
 
         data = request.get_json()
         target = data.get("target")
@@ -259,23 +263,16 @@ def create_blueprint(config: dict = None) -> Blueprint:
             if flag and flag not in REVIEW_FLAGS:
                 return jsonify({"error": f"unknown flag '{flag}'"}), 400
 
-        saved = load_classification_map(source_id)
-
+        marker_changes = {}
         if "source_notes" in data:
-            source_notes = (data["source_notes"] or "").strip()
-            saved.pop("notes", None)
-            if source_notes:
-                # First in the file, above the per-target sections.
-                saved = {"notes": source_notes, **saved}
-
+            marker_changes["notes"] = data["source_notes"]
         if "source_flagged" in data:
-            saved.pop("flagged", None)
-            if data["source_flagged"]:
-                # Beside the notes that explain it, above the per-target sections.
-                notes = saved.pop("notes", None)
-                saved = {**({"notes": notes} if notes else {}), "flagged": True, **saved}
+            marker_changes["flagged"] = data["source_flagged"]
+        if marker_changes:
+            update_source_markers(source_id, config, **marker_changes)
 
         if entries:
+            saved = load_classification_map(source_id)
             columns = targets[target]["source_columns"]
             target_entry = saved.setdefault(target, {"source_columns": columns, "mappings": []})
             target_entry["source_columns"] = columns
@@ -303,7 +300,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
                 else:
                     target_entry["mappings"].append(entry)
 
-        save_classification_map(source_id, saved)
+            save_classification_map(source_id, saved)
         return jsonify({"ok": True})
 
     @bp.route("/api/config")

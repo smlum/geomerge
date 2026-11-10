@@ -54,7 +54,9 @@ async function load() {
     `<span class="field-label">Loading columns from:</span> <span class="field-value">data/raw/${escapeHtml(sourceId)}/${escapeHtml(data.raw_filename)}</span>`;
 
   currentFlagged = !!data.flagged;
-  document.getElementById("flag-badge").classList.toggle("hidden", !currentFlagged);
+  const flagBadge = document.getElementById("flag-badge");
+  flagBadge.classList.toggle("hidden", !currentFlagged);
+  flagBadge.title = data.notes || "No note — add one from Home's Notes column";
 
   const columnMapPath = `sources/${sourceId}/column_map.yaml`;
   const fileLink = document.getElementById("footer-file-link");

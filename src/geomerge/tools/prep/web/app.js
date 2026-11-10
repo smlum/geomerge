@@ -53,19 +53,30 @@ async function copyCommand(badge, command) {
 // Classification's status link, plus any follow-ups left on the source: its
 // note (full text on hover) and a count per flag.
 function classificationCell(s) {
+  if (s.blocked) {
+    const td = document.createElement("td");
+    const badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = "status status-blocked";
+    badge.textContent = `blocked · ${s.blocked.stage}`;
+    badge.title = s.blocked.note || s.blocked.reason;
+    badge.addEventListener("click", () => openBlockedModal(s));
+    td.appendChild(badge);
+    return td;
+  }
   const td = linkedCell(s.classification, `/classification/review.html?id=${encodeURIComponent(s.source_id)}`);
-  if (s.classification_notes) {
+  if (s.source_notes && !s.source_flagged) {
     const note = document.createElement("span");
     note.className = "review-marker";
     note.textContent = "note";
-    note.title = s.classification_notes;
+    note.title = s.source_notes;
     td.appendChild(note);
   }
-  if (s.classification_source_flagged) {
+  if (s.source_flagged) {
     const marker = document.createElement("span");
     marker.className = "review-marker review-marker-flagged";
     marker.textContent = "flagged";
-    marker.title = s.classification_notes;
+    marker.title = s.source_notes || "No note";
     td.appendChild(marker);
   }
   for (const [flag, count] of Object.entries(s.classification_flag_counts)) {
@@ -77,6 +88,62 @@ function classificationCell(s) {
   }
   return td;
 }
+
+// Why a source's classification is blocked (server.py's blocked_reason):
+// the stage holding it up, any note left there, and a new-tab link to that
+// stage's page — or, for preprocessing, the command that unblocks it.
+function openBlockedModal(s) {
+  const b = s.blocked;
+  document.getElementById("blocked-modal-title").textContent = s.source_id;
+  document.getElementById("blocked-modal-reason").textContent = `${b.reason} — classification can't start yet`;
+  const body = document.getElementById("blocked-modal-body");
+  body.innerHTML = "";
+
+  const note = document.createElement("div");
+  if (b.note) {
+    note.className = "blocked-note";
+    note.textContent = b.note;
+  } else if (b.stage === "Home") {
+    note.className = "meta";
+    note.textContent = "No note says why it's excluded.";
+  }
+  body.appendChild(note);
+
+  const actions = document.createElement("div");
+  actions.className = "blocked-actions";
+  if (b.href) {
+    const link = document.createElement("a");
+    link.href = b.href;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = `Open in ${b.stage} ↗`;
+    actions.appendChild(link);
+  }
+  if (b.command) {
+    const cmd = document.createElement("code");
+    cmd.textContent = b.command;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", () => copyCommand(copy, b.command));
+    actions.append(cmd, copy);
+  }
+  body.appendChild(actions);
+
+  document.getElementById("blocked-modal").classList.remove("hidden");
+}
+
+function closeBlockedModal() {
+  document.getElementById("blocked-modal").classList.add("hidden");
+}
+
+document.getElementById("blocked-modal-close").addEventListener("click", closeBlockedModal);
+document.getElementById("blocked-modal").addEventListener("click", (e) => {
+  if (e.target.id === "blocked-modal") closeBlockedModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeBlockedModal();
+});
 
 // "Complete" means all three stages are done (or not applicable) for this
 // source — same complete/not_applicable rule as home's rollups.
@@ -138,7 +205,9 @@ function render() {
   } else if (filterMode === "incomplete") {
     visible = sources.filter((s) => !isRowComplete(s));
   } else if (filterMode === "follow_up") {
-    visible = sources.filter((s) => s.classification_notes || s.classification_flagged);
+    visible = sources.filter(
+      (s) => s.source_notes || s.source_flagged || Object.values(s.classification_flag_counts).some(Boolean)
+    );
   }
 
   const body = document.getElementById("rows-body");
@@ -157,10 +226,8 @@ function render() {
   const classifiedCount = sources.filter(
     (s) => s.classification === "complete" || s.classification === "not_applicable"
   ).length;
-  // "flagged at collection, column mapping, or classify".
-  const flaggedCount = sources.filter(
-    (s) => s.column_mapping_flagged || s.collection_flagged || s.classification_flagged
-  ).length;
+  // The source's own shared flag — see Home's Flagged filter for the full list.
+  const flaggedCount = sources.filter((s) => s.source_flagged).length;
   document.getElementById("progress").textContent =
     `${mappedCount} / ${sources.length} mapped · ${classifiedCount} / ${sources.length} classified · ${flaggedCount} flagged`;
 }

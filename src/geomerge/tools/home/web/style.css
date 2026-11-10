@@ -20,6 +20,9 @@
 
 table {
   width: 100%;
+  /* The fixed <col> widths in index.html add up to ~890px; the rest is the
+     auto-width Source column. Under table.css's table-layout: fixed, a
+     min-width below that total squeezes Source to nothing and cells overlap. */
   min-width: 1100px;
   border-collapse: collapse;
   background: var(--color-panel-bg);
@@ -27,7 +30,7 @@ table {
 
 th, td {
   text-align: left;
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
   font-size: 0.9rem;
@@ -79,6 +82,20 @@ th {
 
 .source-card-trigger:hover {
   text-decoration: underline;
+}
+
+/* A long source id is cut with "…" rather than widening the column (full
+   id on hover, via nameCell's title). */
+td.name {
+  overflow: hidden;
+}
+
+td.name .source-card-trigger {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
 }
 
 td a {
@@ -152,5 +169,281 @@ td a {
 .edit-btn-purple {
   background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
   color: var(--ctp-mauve);
+}
+
+/* Notes column (app.js's notesCell): pills only, full text on hover and in
+   the popout. The whole cell is one button so the hit area isn't just the
+   pills. "+ note" on an empty cell only shows on row hover, to keep the
+   column quiet. */
+/* Last column. Clipped and wrapping, so several pills can never spill into
+   a neighbouring cell (th/td are nowrap table-wide above). */
+td.notes-cell {
+  overflow: hidden;
+  white-space: normal;
+  border-left: 2px solid var(--ctp-surface2);
+}
+
+/* Pills stack in one column at their natural size. Flex's default
+   align-items: stretch made a lone pill fill the cell's height, so it looked
+   different from the same pill sitting beside another. */
+.notes-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  min-height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.notes-trigger:hover {
+  background: none;
+}
+
+.notes-trigger.notes-empty {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  opacity: 0;
+}
+
+tr:hover .notes-trigger.notes-empty,
+.notes-trigger.notes-empty:focus-visible {
+  opacity: 1;
+}
+
+.notes-pill {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--ctp-overlay0, #888) 16%, var(--color-panel-bg));
+  color: var(--color-text-secondary);
+}
+
+.notes-trigger:hover .notes-pill {
+  filter: brightness(0.95);
+}
+
+.notes-pill-flagged,
+.notes-pill-unsure {
+  background: color-mix(in srgb, var(--ctp-yellow) 22%, var(--color-panel-bg));
+  color: color-mix(in srgb, var(--ctp-yellow) 70%, var(--color-text));
+}
+
+.notes-pill-excluded,
+.notes-pill-conflict {
+  background: color-mix(in srgb, var(--ctp-red) 18%, var(--color-panel-bg));
+  color: var(--ctp-red);
+}
+
+.notes-pill-note {
+  background: color-mix(in srgb, var(--ctp-blue, #1e66f5) 16%, var(--color-panel-bg));
+  color: var(--ctp-blue, #1e66f5);
+}
+
+
+/* Provider-level follow-ups under the Flagged filter (renderProviderRow) —
+   no stage statuses, so one cell spans those columns. */
+.provider-row .provider-name {
+  font-weight: 600;
+}
+
+.provider-row td.name div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-rest {
+  white-space: normal;
+}
+
+.provider-rest .meta {
+  margin-left: 0.6rem;
+}
+
+.notes-link {
+  color: var(--ctp-mauve);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.notes-link:hover {
+  text-decoration: underline;
+}
+
+/* The popout (app.js's openNotesModal): a read-only summary first, the
+   edit fields only after Edit. */
+#notes-modal .hidden {
+  display: none;
+}
+
+.notes-panel {
+  width: 560px;
+  max-width: calc(100vw - 2rem);
+}
+
+.notes-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.85rem;
+}
+
+/* The note, editable in place: reads like text until hovered/focused,
+   grows with its content (app.js's growNoteInput). */
+textarea.notes-inline {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.6rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--ctp-surface0);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
+}
+
+textarea.notes-inline:hover {
+  border-color: var(--color-border);
+}
+
+textarea.notes-inline:focus {
+  outline: none;
+  border-color: var(--ctp-mauve);
+  background: var(--color-input-bg);
+}
+
+.notes-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.45rem 1rem;
+  margin: 0.9rem 0 0;
+  font-size: 0.88rem;
+}
+
+.notes-facts dt {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.notes-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notes-missing {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Contact, editable in place like the note: reads as a value until
+   hovered/focused. */
+input.notes-inline-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: -0.2rem 0 0 -0.4rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+input.notes-inline-input:hover {
+  border-color: var(--color-border);
+}
+
+input.notes-inline-input:focus {
+  outline: none;
+  border-color: var(--ctp-mauve);
+  background: var(--color-input-bg);
+}
+
+.notes-facts dt label {
+  cursor: pointer;
+}
+
+.notes-checks {
+  margin-top: 0.6rem;
+}
+
+.notes-hint {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.notes-hint:empty {
+  display: none;
+}
+
+.notes-hint-btn {
+  padding: 0.05rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+/* The notes popout itself. */
+.notes-field-label {
+  display: block;
+  margin: 0 0 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.notes-check {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.class-notes {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.class-notes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.class-notes li {
+  padding: 0.35rem 0;
+  font-size: 0.86rem;
+  white-space: normal;
+}
+
+.class-notes li + li {
+  border-top: 1px dashed var(--color-border);
+}
+
+.class-notes .notes-pill {
+  margin-left: 0.4rem;
+}
+
+#notes-modal-status {
+  margin-left: auto;
 }
 

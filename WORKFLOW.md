@@ -225,22 +225,84 @@ from driving the initial per-source assignment above.
 - Run automated sanity checks/tests against the data, report yes/no plus details in the log
 - Specific checks TBD
 
-## 7. Data visualization
+## 7. Data visualization & comparison
+
+*Planned, not built. Replaces the earlier idea of a separate Plotly Dash app: these are
+tools inside the existing `geomerge serve` app (one process, shared page shell/theming/
+source card), each a Blueprint under `tools/` like every other tab.*
 
 **Input**
-- Data from any pipeline stage (raw through processed) — useful for troubleshooting without a GIS tool, not just final output
+- `data/merged/network_segments.parquet` by default
+- Later: any pipeline stage's per-source output (raw → processed), for troubleshooting one
+  source without a GIS tool — the original intent of this section
+- Past vintages for comparison (`data/reference/canadian_cycling_network_database/` for
+  2024; 2019 possibly later)
 
-**Output**
-- Plotly Dash app
-  - Map plotting data
-    - Click on a point opens tooltip with column: value pairs
-    - Tooltip has option to open a Google Street View link from that point (can point externally and open in new tab)
-  - Column inspection
-    - Number of unique values
-    - Type
-    - Number of nulls
-    - 3 sample points
-  - Table view — sort
-  - Filtering
-    - Apply to map and table?
-    - By specified (categorical?) columns
+**Config** — an `explore:` block in `geomerge.config.yaml`, so nothing bikeways-specific is
+hardcoded: which field colours the map (`canbics_class`), which fields summaries group by
+(province, source_id, canbics_class), the length field (`length_km`), and the comparison
+datasets plus how their columns line up with the target schema.
+
+### Explore tab — one top-level tab, four views (this year's results)
+
+1. **Overview** (build first — no new dependencies)
+   - Headline numbers: total km, segments, sources, provinces
+   - Km by class × province (table + stacked bar); km by source, sortable (outliers like
+     Hamilton's 25× duplication jump out here)
+   - Column profile, one row per schema field: % filled, distinct values, top values,
+     min/max for numeric — the old "column inspection" idea. Validate can reuse it
+     (e.g. "required field is blank" checks), but Overview describes, Validate judges
+   - Per-source sanity table: km, segments, mean/max segment length, km in 2024
+   - Computed once per merge, cached until the merged file changes
+2. **Map**
+   - MapLibre GL + OpenFreeMap basemap (free, no API key, OpenMapTiles schema)
+   - Lines coloured by `canbics_class`; legend toggles classes; filter by province/source
+   - Click a segment → popup of column: value pairs + Google Street View link (new tab)
+   - **Open choice — how to get ~157k+ lines to the browser:**
+     - *PMTiles (leaning this way)*: a `tiles` pipeline stage after merge runs
+       `tippecanoe` → one `.pmtiles` file, served by Flask with HTTP range requests.
+       Handles every zoom level natively; the standard MapLibre route. Needs
+       `brew install tippecanoe` (external binary).
+     - *GeoParquet in the browser*: serve a slimmed GeoParquet (geometry + a few columns,
+       simplified) and render with deck.gl over MapLibre via geoarrow/parquet-wasm. No
+       build step or binary; but the whole file downloads up front (~10–20 MB est.) and
+       adds JS dependencies.
+     - *GeoParquet bbox queries on the server*: Flask reads only rows in the current
+       viewport (GeoParquet per-row bbox) and returns GeoJSON. Good zoomed in, but the
+       national view still needs everything — would need a separate low-zoom view
+       (e.g. per-city dots).
+3. **Table**
+   - Server-side paging/filtering over the merged file (pandas in memory is fine at this
+     size); sort; filter by source/class/province + text search
+   - Shares filters with Map; click a row → zoom Map to that segment
+4. **Compare** — see below; its own tab, linked from here
+
+### Compare tab — its own top-level tab (this year vs past vintages)
+
+Separate from Explore: different inputs (past years) and its own map. Reuses Explore's map
+and summary components.
+
+- **City level**: km by municipality × class, this year vs 2024 (later 2019), with deltas;
+  "in 2024 but missing now" and "new this year" lists of municipalities
+- **Map level**: both vintages on one map for a chosen city — side-by-side, swipe, or
+  overlaid with distinct styling — to see *where* the network changed
+- Out of scope for now: matching individual segments across years (the same hard spatial
+  problem as cross-provider dedup)
+- **Dependency**: clean municipality-level comparison needs `assign_csd` (csduid/csdname)
+  — until then, compare by `metadata.yaml`'s `provider_id`, which is rougher for regional
+  sources (York Region, Peel, Durham)
+
+### Suggested build order
+
+1. Explore → Overview — **built** (headline tiles; breakdown by province-from-provider /
+   provider / source × any categorical field, km or segments, share or absolute bars;
+   sortable per-source table; column profile). Click any province/provider/source to filter
+   the whole page (URL params, linkable; breakdown steps one level down, ending at the raw
+   source_class for a single source); colours per value configurable (explore.colors —
+   canbics_class by comfort tier). Province comes from providers.csv for now —
+   switch to (and cross-check against) assign_csd's province once that exists
+2. Explore → Map (after the PMTiles vs GeoParquet choice)
+3. Explore → Table
+4. Compare (city level first, then map; best after `assign_csd`)
+
+Every view gets more trustworthy once within-source dedup (`dedupe_within_source`) exists.

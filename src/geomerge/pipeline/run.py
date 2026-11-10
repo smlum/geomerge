@@ -46,6 +46,47 @@ def resolve_step(ref: str):
     return getattr(module, func_name)
 
 
+def _excluded(source_id: str, config: dict) -> bool:
+    from geomerge.helpers.source_notes import source_markers
+    return source_markers(source_id, config)["excluded"]
+
+
+def _classification_incomplete(source_id: str, config: dict) -> bool:
+    # Unfinished classification would otherwise go through with a blank
+    # class and only a warning from classify:apply.
+    from geomerge.helpers.status import COMPLETE, classification_overall
+    from geomerge.tools.classification.status import source_status
+    return classification_overall(source_status(source_id, config)["targets"]) != COMPLETE
+
+
+# What can hold a source back, by the name a stage's `blocked_by` list uses
+# in geomerge.config.yaml. A source's `flagged` (helpers/source_notes.py) is
+# deliberately not one of these — it means "something needs doing", not
+# "keep this out". Imported lazily: classification's status lives in tools/,
+# which the pipeline otherwise doesn't depend on.
+GATES = {
+    "excluded": _excluded,
+    "classification_incomplete": _classification_incomplete,
+}
+
+GATE_DESCRIPTIONS = {
+    "excluded": "excluded from pipeline",
+    "classification_incomplete": "classification incomplete",
+}
+
+
+def blocked_by(stage: dict, source_id: str, config: dict):
+    """The first gate in the stage's `blocked_by` list this source fails,
+    or None. Every later stage repeats the earlier stages' gates, so a
+    source held back at one stage goes no further either."""
+    for name in stage.get("blocked_by", []):
+        if name not in GATES:
+            raise ValueError(f"stage '{stage['name']}': unknown blocked_by '{name}' (known: {', '.join(GATES)})")
+        if GATES[name](source_id, config):
+            return name
+    return None
+
+
 def stage_work_units(stage: dict, source_ids: list) -> list:
     """A normal stage runs its steps once per source. A `merge: true` stage
     runs them once, over every source's data combined — it has exactly one
@@ -55,7 +96,31 @@ def stage_work_units(stage: dict, source_ids: list) -> list:
     return source_ids
 
 
-def load_stage_input(stage_index: int, unit_id: str, config: dict):
+def _as_text(value):
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))  # an int ID that became float via NaN: "123", not "123.0"
+    return str(value)
+
+
+def _cast_schema_strings(data, config: dict):
+    """Each source keeps its own raw dtypes (a verbatim source_feature_id is
+    an int in one source, text in another; a column that's all-null in one
+    source is float64), so a plain concat leaves mixed-type object columns
+    that parquet refuses to write. Every column the target schema declares
+    `type: string` is cast to text here, nulls kept as nulls."""
+    schema = load_yaml(config["repo_root"] / config["target_schema"])
+    string_fields = {f["name"] for f in schema.get("fields", []) if f.get("type") == "string"}
+    for column in data.columns:
+        if column in string_fields:
+            data[column] = data[column].map(_as_text).astype("string")
+    return data
+
+
+def load_stage_input(stage_index: int, unit_id: str, config: dict) -> tuple:
+    """(data, warnings) — warnings so far only from a merge unit skipping
+    sources with no input, surfaced in that unit's log entry."""
     repo_root = config["repo_root"]
     stages = config["pipeline"]["stages"]
     stage = stages[stage_index]
@@ -70,7 +135,7 @@ def load_stage_input(stage_index: int, unit_id: str, config: dict):
         raw_path = repo_root / config["raw_dir"] / unit_id / raw_filename
         if not raw_path.exists():
             raise FileNotFoundError(f"raw file not found: {raw_path}")
-        return read_source_file(raw_path, fmt)
+        return read_source_file(raw_path, fmt), []
 
     prev_stage = stages[stage_index - 1]
     input_dir = repo_root / stage.get("input_dir", prev_stage["output_dir"])
@@ -85,27 +150,46 @@ def load_stage_input(stage_index: int, unit_id: str, config: dict):
         input_path = input_dir / prev_stage.get("output_filename", f"{prev_stage['name']}.parquet")
         if not input_path.exists():
             raise FileNotFoundError(f"expected {input_path} — did the '{prev_stage['name']}' stage run?")
-        return gpd.read_parquet(input_path)
+        return gpd.read_parquet(input_path), []
 
     if unit_id == MERGED_UNIT:
-        frames = []
+        # Held-back sources (the merge stage's own blocked_by) are left out
+        # even if an old output file is still on disk from before they were
+        # held back. A source with no output from the previous stage (it
+        # errored, or never ran) is skipped too, rather than failing the
+        # whole merge — one unusable source shouldn't hold up everyone else's.
+        frames, held_back, missing = [], [], []
         for source_id in list_source_ids(config):
             source_path = input_dir / source_id / f"{source_id}.parquet"
-            if not source_path.exists():
-                raise FileNotFoundError(f"expected {source_path} — did the previous stage run for this source?")
-            frames.append(gpd.read_parquet(source_path))
-        return gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=frames[0].crs)
+            if blocked_by(stage, source_id, config):
+                held_back.append(source_id)
+            elif source_path.exists():
+                frames.append(gpd.read_parquet(source_path))
+            else:
+                missing.append(source_id)
+        if not frames:
+            raise FileNotFoundError(f"no source has output in {input_dir} — did the previous stage run?")
+        warnings = []
+        if held_back:
+            warnings.append(f"left out {len(held_back)} excluded or unclassified source(s): {', '.join(held_back)}")
+        if missing:
+            warnings.append(f"skipped {len(missing)} source(s) with no {prev_stage['name']} output: {', '.join(missing)}")
+        merged = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=frames[0].crs)
+        return _cast_schema_strings(merged, config), warnings
 
     input_path = input_dir / unit_id / f"{unit_id}.parquet"
     if not input_path.exists():
         raise FileNotFoundError(f"expected {input_path} — did the previous stage run for this source?")
-    return gpd.read_parquet(input_path)
+    return gpd.read_parquet(input_path), []
 
 
 def format_entry(entry: dict) -> str:
     header = f"{entry['timestamp']} [{entry['stage']}] {entry['source_id']}: {entry['status']}"
     if entry["status"] == "error":
         return f"{header} — {entry['error']}"
+    if entry["status"] == "skipped":
+        removed = f" (removed old output {entry['removed_output']})" if entry.get("removed_output") else ""
+        return f"{header} — {GATE_DESCRIPTIONS.get(entry['blocked_by'], entry['blocked_by'])}{removed}"
     lines = [f"{header} ({entry['rows_before']} -> {entry['rows_after']} rows)"]
     for step_log in entry["steps"]:
         for warning in step_log.get("warnings", []):
@@ -124,11 +208,25 @@ def run_stage(stage: dict, stage_index: int, source_ids: list, config: dict) -> 
             "stage": stage["name"],
             "source_id": unit_id,
         }
+        flag = None if unit_id == MERGED_UNIT else blocked_by(stage, unit_id, config)
+        if flag:
+            entry.update({"status": "skipped", "blocked_by": flag})
+            # Output left over from before the source was held back would
+            # otherwise still read as "complete" on every status page (they
+            # compare mtimes) and could feed a later stage. Regenerated as
+            # soon as the source is let through again, so nothing is lost.
+            stale = output_dir / unit_id / f"{unit_id}.parquet"
+            if stale.exists():
+                stale.unlink()
+                entry["removed_output"] = str(stale.relative_to(config["repo_root"]))
+            log_entries.append(entry)
+            print(format_entry(entry))
+            continue
         try:
-            data = load_stage_input(stage_index, unit_id, config)
+            data, input_warnings = load_stage_input(stage_index, unit_id, config)
             rows_before = len(data)
 
-            step_logs = []
+            step_logs = [{"step": "load_input", "warnings": input_warnings}] if input_warnings else []
             for ref, step in steps:
                 data, step_log = step(data, source_id=unit_id, config=config)
                 step_logs.append({"step": ref, **(step_log or {})})
@@ -201,7 +299,10 @@ def main(argv=None):
 
     log_path = write_logs(all_log_entries, config["repo_root"])
     ok = sum(1 for e in all_log_entries if e["status"] == "ok")
-    print(f"\n{ok}/{len(all_log_entries)} succeeded. Log: {log_path}")
+    skipped = sum(1 for e in all_log_entries if e["status"] == "skipped")
+    ran = len(all_log_entries) - skipped
+    skipped_note = f" ({skipped} skipped — excluded or unclassified)" if skipped else ""
+    print(f"\n{ok}/{ran} succeeded{skipped_note}. Log: {log_path}")
 
 
 if __name__ == "__main__":

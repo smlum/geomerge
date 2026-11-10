@@ -25,20 +25,28 @@ Then open http://localhost:8640
 from pathlib import Path
 
 import yaml
-from flask import Flask, abort, jsonify, render_template, send_from_directory
+from flask import Flask, abort, jsonify, render_template, request, send_from_directory
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 from geomerge.helpers.config import load_config
 from geomerge.helpers.nav import NAV_TABS
+from geomerge.helpers.source_notes import source_markers, update_source_markers
 from geomerge.helpers.status import NOT_BUILT
 from geomerge.helpers.status import classification_overall as classification_overall_status
 from geomerge.pipeline.status import preprocessing_status, processing_status
+from geomerge.tools.classification.status import review_markers
 from geomerge.tools.classification.status import source_status as classification_status
 from geomerge.tools.classification.web.server import create_blueprint as create_classification_blueprint
-from geomerge.tools.collection.status import source_metadata_status, source_raw_data_status
+from geomerge.tools.collection.status import (
+    flagged_providers,
+    provider_row,
+    source_metadata_status,
+    source_raw_data_status,
+)
 from geomerge.tools.collection.web.server import create_blueprint as create_collection_blueprint
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
 from geomerge.tools.column_mapping.web.server import create_blueprint as create_column_mapping_blueprint
+from geomerge.tools.explore.web.server import create_blueprint as create_explore_blueprint
 from geomerge.tools.pipeline.web.server import create_blueprint as create_pipeline_blueprint
 from geomerge.tools.prep.web.server import create_blueprint as create_prep_blueprint
 from geomerge.tools.setup.web.server import create_blueprint as create_setup_blueprint
@@ -82,6 +90,8 @@ def create_app(config: dict = None) -> Flask:
     app.register_blueprint(create_prep_blueprint(config), url_prefix="/prep")
     app.register_blueprint(create_pipeline_blueprint(config), url_prefix="/pipeline")
     app.register_blueprint(create_validate_blueprint(config), url_prefix="/validate")
+    # Read-only views over the merged output — not per-source either.
+    app.register_blueprint(create_explore_blueprint(config), url_prefix="/explore")
     app.register_blueprint(create_column_mapping_blueprint(config), url_prefix="/column-mapping")
     app.register_blueprint(create_classification_blueprint(config), url_prefix="/classification")
 
@@ -107,6 +117,13 @@ def create_app(config: dict = None) -> Flask:
 
         return {
             "source_id": source_id,
+            # The source's one shared note/flag/exclude switch (metadata.yaml,
+            # helpers/source_notes.py), plus how many per-class notes it has —
+            # for the Notes column and the Flagged filter (app.js).
+            "markers": {
+                **source_markers(source_id, config),
+                "class_notes": len(review_markers(source_id, config)["notes"]),
+            },
             # collection/ — what the collection checklist tool produces:
             # metadata.yaml and the raw file landing on disk.
             "collection": {
@@ -153,6 +170,61 @@ def create_app(config: dict = None) -> Flask:
     @app.route("/api/sources")
     def api_sources():
         return jsonify([source_row(source_id) for source_id in source_ids()])
+
+    # Provider-level follow-ups (flagged checklist.csv rows) — shown as extra
+    # rows under Home's Flagged filter, since most have no source yet (e.g.
+    # "PDF only, contact them"). Edited through collection's own row-based
+    # /api/note and /api/flag, so there's no save endpoint here.
+    @app.route("/api/flagged_providers")
+    def api_flagged_providers():
+        return jsonify(flagged_providers(config))
+
+    # Backs Home's notes popout: the source's shared note/flag/exclude switch,
+    # plus its per-class notes from classification_map.yaml (read-only here —
+    # they're edited in Classify, one per mapping).
+    @app.route("/api/source_notes/<source_id>")
+    def api_source_notes(source_id):
+        if source_id not in source_ids():
+            return jsonify({"error": "no such source"}), 404
+        metadata_path = sources_dir / source_id / "metadata.yaml"
+        metadata = yaml.safe_load(metadata_path.read_text()) or {} if metadata_path.exists() else {}
+        provider = provider_row(metadata.get("provider_id"), config)
+        return jsonify({
+            **source_markers(source_id, config),
+            "class_notes": review_markers(source_id, config)["notes"],
+            "path": f"{config['sources_dir']}/{source_id}/metadata.yaml",
+            # A few metadata.yaml fields for following up (where to look, who
+            # to ask) — the full set stays in Collect's metadata modal.
+            "details": {
+                "dataset_page_url": metadata.get("dataset_page_url") or "",
+                "portal_url": provider.get("portal_url", ""),
+                "source_updated_date": str(metadata.get("source_updated_date") or ""),
+                "license_name": metadata.get("license_name") or "",
+                "license_url": metadata.get("license_url") or "",
+                "open_license": metadata.get("open_license"),
+                "contact": metadata.get("contact") or "",
+                "provider_contact": provider.get("contact", ""),
+            },
+        })
+
+    @app.route("/api/source_notes/<source_id>", methods=["POST"])
+    def api_source_notes_save(source_id):
+        if source_id not in source_ids():
+            return jsonify({"error": "no such source"}), 404
+        data = request.get_json() or {}
+        changes = {k: data[k] for k in ("notes", "flagged", "excluded") if k in data}
+        if not changes and "contact" not in data:
+            return jsonify({"error": "notes, flagged, excluded or contact required"}), 400
+        result = update_source_markers(source_id, config, **changes) if changes else source_markers(source_id, config)
+        if "contact" in data:
+            # Same full-document read-modify-write as collection's own save.
+            metadata_path = sources_dir / source_id / "metadata.yaml"
+            metadata = yaml.safe_load(metadata_path.read_text()) or {}
+            metadata["contact"] = (data["contact"] or "").strip()
+            with open(metadata_path, "w") as f:
+                yaml.dump(metadata, f, sort_keys=False, allow_unicode=True)
+            result = {**result, "contact": metadata["contact"]}
+        return jsonify(result)
 
     # Backs the cross-page source-card modal (/source-card.js) — a click on
     # a source id anywhere (home/prep's tables, column_mapping's header)

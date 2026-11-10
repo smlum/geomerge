@@ -103,6 +103,7 @@ function rowClass(row) {
 
 function renderRow(row) {
   const tr = document.createElement("tr");
+  tr.dataset.providerId = row.provider_id;
   tr.className = rowClass(row);
 
   const nameTd = document.createElement("td");
@@ -377,7 +378,6 @@ const METADATA_FIELDS = [
 // show once there's more than one — with just one, neither means anything.
 let modalRowIndex = null;
 let modalProviderId = null;
-let modalChecklistNotes = "";
 let modalNewSourceDefaults = {};
 let modalBlocks = []; // { uid, sourceId, block, heading, pathLine, removeBtn, labelInput }
 let blockUidCounter = 0;
@@ -400,7 +400,6 @@ function newSourceDefaults(row) {
 async function openMetadata(row) {
   modalRowIndex = row.row_index;
   modalProviderId = row.provider_id;
-  modalChecklistNotes = row.notes || "";
   modalNewSourceDefaults = newSourceDefaults(row);
   fieldValidators = {};
   modalBlocks = [];
@@ -480,10 +479,11 @@ function addSourceBlock(sourceId, data) {
   // Uncommitted blocks get their initial preview set once labelInput exists,
   // right after it's created below — updatePathPreview() reads its value.
 
-  // The checklist's own notes column is the source of truth for notes — it
-  // propagates in here (and gets saved back into the yaml), not the other
-  // way around.
-  data.notes = modalChecklistNotes || data.notes || "";
+  // The source's own note (metadata.yaml — shared by every stage, see
+  // helpers/source_notes.py), not the checklist row's provider-level note
+  // in the table's Notes column. The two used to be copied into each other,
+  // which overwrote per-source notes on providers with more than one source.
+  data.notes = data.notes || "";
 
   const form = document.createElement("form");
   form.className = "edit-form";
@@ -1021,8 +1021,23 @@ filterSelect.addEventListener("change", () => {
 // Deep link from geomerge serve's Metadata column (?id=<source_id>) — jumps
 // straight into that source's metadata modal instead of landing on the full
 // checklist and making you go find the row yourself.
+// ?provider=<provider_id> (from Home's Flagged filter, for a provider-level
+// follow-up with no source yet) instead scrolls to that checklist row, under
+// the All filter so it can't be hidden, and outlines it.
 async function openFromQueryParam() {
-  const sourceId = new URLSearchParams(location.search).get("id");
+  const params = new URLSearchParams(location.search);
+  const providerId = params.get("provider");
+  if (providerId) {
+    filterSelect.value = "all";
+    render();
+    const tr = document.querySelector(`tr[data-provider-id="${CSS.escape(providerId)}"]`);
+    if (tr) {
+      tr.classList.add("linked-row");
+      tr.scrollIntoView({ block: "center" });
+    }
+    return;
+  }
+  const sourceId = params.get("id");
   if (!sourceId) return;
   const row = rows.find((r) => (r.source_ids || "").split(",").map((s) => s.trim()).includes(sourceId));
   if (row) await openMetadata(row);

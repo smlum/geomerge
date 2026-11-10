@@ -13,9 +13,9 @@ from geomerge.helpers.config import stage_output_dir
 from geomerge.helpers.constants import REVIEW_FLAGS
 from geomerge.helpers.file_cache import cached_read, cached_yaml
 from geomerge.helpers.geo_sampling import network_geometry
+from geomerge.helpers.source_notes import source_markers
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_APPLICABLE, NOT_STARTED
 from geomerge.pipeline.status import preprocessing_status
-from geomerge.tools.collection.status import source_flagged as collection_flagged
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
 
 
@@ -149,15 +149,11 @@ def preprocessed_path(source_id: str, config: dict) -> Path:
 
 
 def is_eligible(source_id: str, config: dict) -> bool:
-    """False if this source is flagged (at collection or column mapping) or
-    hasn't cleared column mapping / preprocessing yet — a source shouldn't
-    be classified until the data feeding it is settled. Flagging happens in
-    two disconnected places (checklist.csv's collection-stage flag, joined
-    via metadata.yaml's provider_id, and column_map.yaml's own flag), so
-    both are checked here rather than just one."""
+    """False if this source hasn't cleared column mapping / preprocessing yet
+    — a source shouldn't be classified until the data feeding it is settled.
+    A flag doesn't block classifying (it only means something needs doing);
+    an excluded source has no preprocessed data, since the pipeline skips it."""
     cm = column_mapping_status(source_id, config)
-    if cm["flagged"] or collection_flagged(source_id, config):
-        return False
     if cm["column_map_status"] != COMPLETE:
         return False
     return preprocessing_status(source_id, config) == COMPLETE
@@ -178,19 +174,28 @@ def target_status(source_id: str, target: str, config: dict) -> str:
 
 
 def review_markers(source_id: str, config: dict) -> dict:
-    """{"notes": source-level note, "flagged": source-level flag,
-    "flag_counts": {flag: n, ...}} from
+    """{"flag_counts": {flag: n, ...}, "notes": [per-mapping note, ...]} from
     classification_map.yaml alone — no parquet read, so it's cheap to call for
-    every source on the Prepare dashboard."""
+    every source on a dashboard. Per-mapping only: the source-level note and
+    flag live in metadata.yaml (helpers/source_notes.py)."""
     targets_config = config["tools"]["classification"]["targets"]
     sources_dir = config["repo_root"] / config["sources_dir"]
     saved = cached_yaml(sources_dir / source_id / "classification_map.yaml")
     flag_counts = {flag: 0 for flag in REVIEW_FLAGS}
+    notes = []
     for target in targets_config:
         for mapping in saved.get(target, {}).get("mappings", []):
             if mapping.get("flag") in flag_counts:
                 flag_counts[mapping["flag"]] += 1
-    return {"notes": saved.get("notes", ""), "flagged": bool(saved.get("flagged", False)), "flag_counts": flag_counts}
+            if mapping.get("flag") or mapping.get("notes"):
+                notes.append({
+                    "target": target,
+                    "values": mapping.get("values", {}),
+                    "value": mapping.get("target", ""),
+                    "flag": mapping.get("flag", ""),
+                    "notes": mapping.get("notes", ""),
+                })
+    return {"flag_counts": flag_counts, "notes": notes}
 
 
 def source_status(source_id: str, config: dict) -> dict:
@@ -203,6 +208,6 @@ def source_status(source_id: str, config: dict) -> dict:
         return {"has_preprocessed_data": False, "targets": {name: NOT_APPLICABLE for name in targets_config}}
     return {
         "has_preprocessed_data": True,
-        "flagged": review_markers(source_id, config)["flagged"],
+        "flagged": source_markers(source_id, config)["flagged"],
         "targets": {name: target_status(source_id, name, config) for name in targets_config},
     }

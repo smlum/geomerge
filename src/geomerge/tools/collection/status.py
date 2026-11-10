@@ -43,26 +43,47 @@ def source_raw_data_status(source_id: str, config: dict) -> str:
     return COMPLETE if raw_path.exists() else MISSING
 
 
-def _flagged_provider_ids(checklist_path: Path) -> set:
+def _flagged_rows(checklist_path: Path) -> list:
     checklist = pd.read_csv(checklist_path, dtype=str).fillna("")
-    first_rows = checklist.drop_duplicates("provider_id")
-    return set(first_rows.loc[first_rows["flagged"] == "x", "provider_id"])
+    if "flagged" not in checklist.columns:
+        return []
+    flagged = checklist[checklist["flagged"] == "x"]
+    return [
+        {
+            "row_index": int(index),
+            "provider_id": row["provider_id"],
+            "name": row["name"],
+            "province": row["province"],
+            "notes": row["notes"],
+            "source_ids": [s for s in row["source_ids"].split(",") if s],
+            "portal_url": row.get("portal_url", ""),
+            "source_url": row.get("source_url", ""),
+            "contact": row.get("contact", ""),
+        }
+        for index, row in flagged.iterrows()
+    ]
 
 
-def source_flagged(source_id: str, config: dict) -> bool:
-    """Is this source's checklist.csv row flagged? checklist.csv is keyed
-    per-provider, not per-source, so this joins via metadata.yaml's
-    provider_id rather than source_id directly."""
-    repo_root = config["repo_root"]
-    metadata_path = repo_root / config["sources_dir"] / source_id / "metadata.yaml"
-    if not metadata_path.exists():
-        return False
-    metadata = cached_yaml(metadata_path)
-    provider_id = metadata.get("provider_id")
-    if not provider_id:
-        return False
+def _rows_by_provider(checklist_path: Path) -> dict:
+    checklist = pd.read_csv(checklist_path, dtype=str).fillna("")
+    return {row["provider_id"]: row.to_dict() for _, row in checklist.drop_duplicates("provider_id").iterrows()}
 
-    checklist_path = repo_root / config["sources_dir"] / "checklist.csv"
+
+def provider_row(provider_id: str, config: dict) -> dict:
+    """A provider's checklist.csv row as a dict ({} if none) — e.g. its
+    portal_url and provider-level contact, for a source's notes popout."""
+    checklist_path = config["repo_root"] / config["sources_dir"] / "checklist.csv"
+    if not provider_id or not checklist_path.exists():
+        return {}
+    return cached_read(checklist_path, _rows_by_provider).get(provider_id, {})
+
+
+def flagged_providers(config: dict) -> list:
+    """Every flagged checklist.csv row — a provider-level follow-up (usually
+    about finding data, before any source exists), as opposed to a source's
+    own flag in its metadata.yaml (helpers/source_notes.py). Neither affects
+    the pipeline. row_index is what collection's /api/note and /api/flag take."""
+    checklist_path = config["repo_root"] / config["sources_dir"] / "checklist.csv"
     if not checklist_path.exists():
-        return False
-    return provider_id in cached_read(checklist_path, _flagged_provider_ids)
+        return []
+    return cached_read(checklist_path, _flagged_rows)

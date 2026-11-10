@@ -362,6 +362,22 @@ def create_blueprint(config: dict = None) -> Blueprint:
         save_checklist(df)
         return jsonify({"ok": True})
 
+    # Just the contact column — for Home's notes popout on a provider-level
+    # follow-up. /api/update_row would also rewrite every other editable field.
+    @bp.route("/api/contact", methods=["POST"])
+    def api_contact():
+        data = request.get_json()
+        row_index = int(data["row_index"])
+        contact = (data.get("contact") or "").strip()
+
+        df = load_checklist()
+        if row_index not in df.index:
+            return jsonify({"error": "row not found"}), 404
+
+        df.at[row_index, "contact"] = contact
+        save_checklist(df)
+        return jsonify({"ok": True})
+
     @bp.route("/api/portal_url", methods=["POST"])
     def api_portal_url():
         data = request.get_json()

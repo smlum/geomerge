@@ -149,6 +149,12 @@ async function openSourceCard(sourceId) {
     }
     statusSection.appendChild(sourceCardRow(stage.label, node));
   }
+  // The source's slice of the merged output, in Explore's Overview
+  // (filtered via ?source_id=, the same param that page keeps in its URL).
+  statusSection.appendChild(sourceCardRow(
+    "Results",
+    sourceCardExternalLink(`/explore/?source_id=${encodeURIComponent(sourceId)}`, "View in Explore ↗")
+  ));
   body.appendChild(statusSection);
 }
 

@@ -1,0 +1,521 @@
+/* Explore's own styles. Unlike the dashboards (one fixed-height scrolling
+   table) this is a long document that scrolls the window, so the header
+   stays sticky (page-shell.css) but uses the same padding-not-margin trick
+   as setup's schema page to avoid a "drifts then catches" lock. */
+body.explore-page {
+  --tab-accent: var(--ctp-sapphire);
+}
+
+body.explore-page header {
+  margin-top: -1.5rem;
+  padding-top: 1.5rem;
+  padding-bottom: 0.75rem;
+  align-items: flex-end;
+}
+
+/* --- Chart colours ---------------------------------------------------------
+   Categorical slots, fixed order (the field's schema category order maps to
+   slot 1..8, so a class keeps its colour whatever's filtered). Not the
+   Catppuccin accents: those fail the CVD/chroma checks for an 8-way
+   categorical (validated with the dataviz validator against this app's own
+   Latte base #eff1f5 and Frappé base #303446 — all checks pass for these).
+   Several sit under 3:1 against the panel, so every bar is paired with its
+   exact numbers in the same table row (the required relief). "Other" and
+   "None" are neutrals, never a 9th hue. */
+:root[data-theme="light"] {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --series-other: #8c8fa1;
+  --series-none: #ccd0da;
+}
+
+:root[data-theme="dark"] {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-other: #838ba7;
+  --series-none: #51576d;
+}
+
+/* --- Sub-view nav ---------------------------------------------------------- */
+.subnav {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border-radius: 8px;
+  background: var(--color-panel-bg);
+}
+
+.subnav-item {
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.subnav-item.active {
+  background: color-mix(in srgb, var(--ctp-sapphire) 18%, var(--color-panel-bg));
+  color: var(--ctp-sapphire);
+  font-weight: 600;
+}
+
+.subnav-item.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --- Headline tiles -------------------------------------------------------- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.tile {
+  background: var(--color-panel-bg);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+}
+
+.tile-value {
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.tile-label {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.15rem;
+}
+
+/* --- Panels ---------------------------------------------------------------- */
+.panel {
+  background: var(--color-panel-bg);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel-head h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.segmented button.active {
+  background: color-mix(in srgb, var(--ctp-sapphire) 18%, var(--color-panel-bg));
+  color: var(--ctp-sapphire);
+  font-weight: 600;
+}
+
+/* A long table scrolls inside its panel rather than making the page huge. */
+.panel-scroll {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* --- Legend ---------------------------------------------------------------- */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend-item strong {
+  color: var(--color-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* --- Tables ---------------------------------------------------------------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.data-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.data-table th.sortable:hover,
+.data-table th.sorted {
+  color: var(--color-text);
+}
+
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--ctp-surface0) 50%, transparent);
+}
+
+.data-table tfoot td {
+  font-weight: 600;
+  border-top: 2px solid var(--color-border);
+  border-bottom: none;
+}
+
+.muted {
+  color: var(--color-text-secondary);
+}
+
+/* --- Stacked bar ----------------------------------------------------------- */
+.bar-cell {
+  width: 38%;
+  min-width: 220px;
+}
+
+/* Length is relative to the largest row, so bars compare magnitude across
+   rows as well as composition within one. 2px gaps between segments are
+   the panel surface showing through (the spacer rule). */
+.stack {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+}
+
+.stack-seg {
+  height: 100%;
+  min-width: 2px;
+}
+
+.stack-seg:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.stack-seg:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.stack-seg:only-child {
+  border-radius: 4px;
+}
+
+/* --- Profile --------------------------------------------------------------- */
+.kind {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.fill-meter {
+  display: inline-block;
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ctp-surface0);
+  vertical-align: middle;
+  margin-right: 0.4rem;
+  overflow: hidden;
+}
+
+.fill-meter span {
+  display: block;
+  height: 100%;
+  background: var(--ctp-sapphire);
+}
+
+.profile-detail td {
+  white-space: normal;
+  background: var(--color-page-bg);
+}
+
+.top-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.2rem 1rem;
+  max-width: 640px;
+  font-size: 0.8rem;
+}
+
+.top-values .value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expand-btn {
+  border: none;
+  background: none;
+  padding: 0 0.3rem;
+  color: var(--color-text-secondary);
+}
+
+/* --- Tooltip --------------------------------------------------------------- */
+.chart-tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  max-width: 280px;
+}
+
+.chart-tooltip .tt-title {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.chart-tooltip .tt-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chart-tooltip .tt-row span:last-child {
+  margin-left: auto;
+  padding-left: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.source-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.source-link:hover {
+  color: var(--ctp-sapphire);
+  text-decoration: underline;
+}
+
+/* Per-class number columns: headers wrap onto two lines so nine classes fit
+   beside the bar without a side-scroll. */
+.data-table th.series-col {
+  white-space: normal;
+  width: 88px;
+  line-height: 1.25;
+  vertical-align: bottom;
+}
+
+.data-table th.series-col .legend-item {
+  align-items: flex-start;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.data-table th.series-col .swatch {
+  margin-top: 0.2rem;
+}
+
+/* Series fills: overview.js sets --cl/--cd (light/dark) on each swatch and
+   bar segment — a configured colour (explore.colors) or a --series-N slot —
+   and the active theme picks one. */
+.swatch,
+.stack-seg {
+  background: var(--cl);
+}
+
+:root[data-theme="dark"] .swatch,
+:root[data-theme="dark"] .stack-seg {
+  background: var(--cd);
+}
+
+/* --- Filters ----------------------------------------------------------------
+   The bar of active filters, and the clickable geography values that add
+   one (overview.js's filterLink). */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.3rem 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--ctp-sapphire) 18%, var(--color-panel-bg));
+  color: var(--color-text);
+}
+
+.chip-key {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.chip-remove {
+  border: none;
+  background: none;
+  padding: 0 0.35rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+}
+
+.chip-remove:hover {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+}
+
+.filter-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.filter-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.filter-link:hover {
+  color: var(--ctp-sapphire);
+  text-decoration: underline;
+}
+
+.info-btn {
+  border: none;
+  background: none;
+  padding: 0 0.2rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+
+.info-btn:hover {
+  background: none;
+  color: var(--ctp-sapphire);
+}
+
+/* Raw source_class values can be long — truncate, full text on hover. */
+.geo-cell .raw-value {
+  display: inline-block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ctp-sapphire);
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+/* Share of the whole under each series total (replaces the old legend). */
+.total-share {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+/* .filter-bar's display: flex above would otherwise beat page-shell.css's
+   .hidden (same specificity, later file). */
+.filter-bar.hidden {
+  display: none;
+}

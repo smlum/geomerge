@@ -21,6 +21,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request
 
 from geomerge.helpers.config import load_config
 from geomerge.helpers.matching import match_name
+from geomerge.helpers.source_notes import update_source_markers
 from geomerge.tools.column_mapping.inspect_raw import GEO_FORMATS, inspect_columns
 from geomerge.tools.column_mapping.status import cached_raw_column_names, load_yaml, source_status
 
@@ -142,7 +143,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
             # raw column and what's expected can be checked against the
             # original listing.
             "dataset_page_url": metadata.get("dataset_page_url", ""),
-            "flagged": bool(saved.get("flagged", False)),
+            "flagged": bool(metadata.get("flagged", False)),
+            "notes": metadata.get("notes") or "",
         })
 
     @bp.route("/api/column_map/<source_id>", methods=["POST"])
@@ -200,12 +202,17 @@ def create_blueprint(config: dict = None) -> Blueprint:
         column_map = {name: target for name, target in assignments.items() if target}
         dropped = sorted(name for name, target in assignments.items() if not target)
 
-        out = {"source_id": source_id, "column_map": column_map, "dropped": dropped, "flagged": flagged}
+        out = {"source_id": source_id, "column_map": column_map, "dropped": dropped}
 
         out_path = sources_dir / source_id / "column_map.yaml"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as f:
             yaml.dump(out, f, sort_keys=False, allow_unicode=True)
+        # Flag & next sets the source's shared flag (metadata.yaml). A plain
+        # save never clears it — the flag may be about something other than
+        # mapping; it's cleared from Home's notes popout or Classify.
+        if flagged:
+            update_source_markers(source_id, config, flagged=True)
         return jsonify({"ok": True})
 
     # The raw file text — for geomerge serve's read-only column_map.yaml

@@ -14,6 +14,8 @@
       <option value="all" selected>All</option>
       <option value="complete">Complete</option>
       <option value="incomplete">Incomplete</option>
+      <option value="flagged">Flagged</option>
+      <option value="excluded">Excluded</option>
     </select>
   </label>
 {% endblock %}
@@ -22,14 +24,18 @@
   <div class="table-scroll">
     <table id="rows" class="rows-pending">
       <colgroup>
+        <!-- Each status column is just wider than its longest pill
+             ("needs review" for Map, "not applicable" for Classify), so the
+             whole table fits a ~1280px laptop window. -->
         <col />
-        <col style="width: 121px" />
-        <col style="width: 121px" />
-        <col style="width: 151px" />
-        <col style="width: 129px" />
-        <col style="width: 158px" />
-        <col style="width: 122px" />
-        <col style="width: 150px" />
+        <col style="width: 92px" />
+        <col style="width: 92px" />
+        <col style="width: 118px" />
+        <col style="width: 100px" />
+        <col style="width: 132px" />
+        <col style="width: 96px" />
+        <col style="width: 116px" />
+        <col style="width: 140px" />
       </colgroup>
       <thead>
         <tr>
@@ -44,11 +50,12 @@
             Validation
             <button id="refresh-btn" class="refresh-btn" title="Refresh status">&#8635;</button>
           </th>
+          <th class="group-boundary">Notes</th>
         </tr>
       </thead>
       <tbody id="rows-body"></tbody>
       <tfoot>
-        <tr><td colspan="8"></td></tr>
+        <tr><td colspan="9"></td></tr>
       </tfoot>
     </table>
   </div>
@@ -79,6 +86,63 @@
        preview (it's whatever raw dataset format the source landed in, not a
        geomerge-owned file) and nothing to edit, so this is a plain info
        modal rather than yamlPreviewCell's fetch-and-highlight pattern. -->
+  <!-- Notes popout (app.js's openNotesModal). Opens on a read-only summary —
+       what needs doing, where the source stands, where to look, who to ask —
+       with Edit revealing the fields: a source's shared note/flag/exclude
+       switch and contact (metadata.yaml), or a provider-level follow-up's
+       note, flag and contact (checklist.csv). -->
+  <div id="notes-modal" class="modal-overlay hidden">
+    <div class="modal-panel notes-panel">
+      <div class="modal-header">
+        <div class="modal-title-block">
+          <h2 id="notes-modal-title"></h2>
+          <div id="notes-modal-path" class="meta"></div>
+        </div>
+        <button id="notes-modal-close" class="modal-close" type="button">&times;</button>
+      </div>
+
+      <div class="notes-summary">
+        <div class="notes-status-line">
+          <span id="notes-sum-badges"></span>
+          <span id="notes-sum-status" class="meta"></span>
+        </div>
+        <textarea id="notes-modal-text" class="notes-inline" rows="2" placeholder="Add a note…"></textarea>
+        <dl class="notes-facts">
+          <dt>Source</dt><dd id="notes-sum-source"></dd>
+          <dt id="notes-sum-links-label">Links</dt><dd id="notes-sum-links"></dd>
+          <dt><label for="notes-modal-contact">Contact</label></dt>
+          <dd>
+            <input id="notes-modal-contact" class="notes-inline-input" type="text" placeholder="None yet — email, phone or contact page URL" />
+            <div id="notes-modal-contact-hint" class="meta notes-hint"></div>
+          </dd>
+          <dt id="notes-sum-facts-label">Data</dt><dd id="notes-sum-facts"></dd>
+        </dl>
+        <div class="notes-checks">
+          <label class="notes-check">
+            <input type="checkbox" id="notes-modal-flagged" />
+            <span><strong>Flagged</strong> <span class="meta">— something needs doing</span></span>
+          </label>
+          <label id="notes-modal-excluded-wrap" class="notes-check">
+            <input type="checkbox" id="notes-modal-excluded" />
+            <span><strong>Exclude from pipeline</strong> <span class="meta">— skipped by preprocessing, processing and merge</span></span>
+          </label>
+        </div>
+      </div>
+
+      <div id="notes-modal-class" class="class-notes hidden">
+        <div class="notes-field-label">Class notes <span class="meta">(edited in Classify)</span></div>
+        <ul id="notes-modal-class-list"></ul>
+      </div>
+
+      <div class="modal-actions">
+        <button id="notes-modal-save" type="button" class="hidden">Save</button>
+        <button id="notes-modal-cancel" type="button" class="hidden">Cancel</button>
+        <a id="notes-modal-link" class="notes-link" href="#" target="_blank" rel="noopener"></a>
+        <span id="notes-modal-status" class="meta"></span>
+      </div>
+    </div>
+  </div>
+
   <div id="raw-modal" class="modal-overlay hidden">
     <div class="modal-panel">
       <div class="modal-header">
