@@ -30,7 +30,14 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 
 from geomerge.helpers.config import load_config
 from geomerge.helpers.nav import NAV_TABS
-from geomerge.helpers.source_notes import source_markers, update_source_markers
+from geomerge.helpers.file_cache import cached_yaml
+from geomerge.helpers.source_notes import (
+    FLAG_STATUSES,
+    flag_reasons,
+    metadata_path,
+    source_markers,
+    update_source_markers,
+)
 from geomerge.helpers.status import NOT_BUILT
 from geomerge.helpers.status import classification_overall as classification_overall_status
 from geomerge.pipeline.status import preprocessing_status, processing_status
@@ -111,6 +118,15 @@ def create_app(config: dict = None) -> Flask:
     # /api/source_info/<id> (one source, for the cross-page source-card
     # modal — see /source-card.js) so the two never drift out of sync on
     # what "status" means for a given stage.
+    # Whether anyone's recorded who to ask — the source's own contact, or
+    # its provider's in checklist.csv (the popout offers to copy that one
+    # over). Turns a "contact" follow-up into "find contact" (app.js).
+    def has_contact(source_id: str) -> bool:
+        metadata = cached_yaml(metadata_path(source_id, config)) or {}
+        if (metadata.get("contact") or "").strip():
+            return True
+        return bool((provider_row(metadata.get("provider_id"), config).get("contact") or "").strip())
+
     def source_row(source_id: str) -> dict:
         cm = column_mapping_status(source_id, config)
         cls = classification_status(source_id, config)
@@ -123,6 +139,7 @@ def create_app(config: dict = None) -> Flask:
             "markers": {
                 **source_markers(source_id, config),
                 "class_notes": len(review_markers(source_id, config)["notes"]),
+                "has_contact": has_contact(source_id),
             },
             # collection/ — what the collection checklist tool produces:
             # metadata.yaml and the raw file landing on disk.
@@ -159,7 +176,12 @@ def create_app(config: dict = None) -> Flask:
 
     @app.route("/")
     def index():
-        return render_template("index.html", active_tab="home", include_source_card=True)
+        # The project's flag reasons (geomerge.config.yaml) and the fixed
+        # statuses, for the Notes pills, the popout's pickers and the filter.
+        return render_template(
+            "index.html", active_tab="home", include_source_card=True,
+            flag_reasons=flag_reasons(config), flag_statuses=list(FLAG_STATUSES),
+        )
 
     # Just the rows, so home's and prep's tables can draw immediately and fill
     # in the slower statuses from their own /api/sources afterwards.
@@ -212,10 +234,14 @@ def create_app(config: dict = None) -> Flask:
         if source_id not in source_ids():
             return jsonify({"error": "no such source"}), 404
         data = request.get_json() or {}
-        changes = {k: data[k] for k in ("notes", "flagged", "excluded") if k in data}
+        marker_keys = ("notes", "flagged", "flag_reasons", "flag_status", "excluded")
+        changes = {k: data[k] for k in marker_keys if k in data}
         if not changes and "contact" not in data:
-            return jsonify({"error": "notes, flagged, excluded or contact required"}), 400
-        result = update_source_markers(source_id, config, **changes) if changes else source_markers(source_id, config)
+            return jsonify({"error": f"{', '.join(marker_keys)} or contact required"}), 400
+        try:
+            result = update_source_markers(source_id, config, **changes) if changes else source_markers(source_id, config)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         if "contact" in data:
             # Same full-document read-modify-write as collection's own save.
             metadata_path = sources_dir / source_id / "metadata.yaml"

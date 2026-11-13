@@ -38,6 +38,7 @@ WORK_COLUMNS = ["prior_url", "source_url", "checked", "checked_date", "source_id
 COLUMN_ORDER = [
     "checked", "provider_id", "portal_url", "prior_url", "source_url",
     "name", "geography_level", "province", "checked_date", "source_ids", "notes", "flagged",
+    "flag_reasons", "flag_status", "flag_status_date",
 ]
 
 

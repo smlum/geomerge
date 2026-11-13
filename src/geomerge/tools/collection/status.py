@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from geomerge.helpers.file_cache import cached_read, cached_yaml
+from geomerge.helpers.source_notes import flag_markers
 from geomerge.helpers.status import COMPLETE, MISSING, PARTIAL
 
 
@@ -59,6 +60,9 @@ def _flagged_rows(checklist_path: Path) -> list:
             "portal_url": row.get("portal_url", ""),
             "source_url": row.get("source_url", ""),
             "contact": row.get("contact", ""),
+            **flag_markers(
+                True, row.get("flag_reasons", ""), row.get("flag_status", ""), row.get("flag_status_date", "")
+            ),
         }
         for index, row in flagged.iterrows()
     ]

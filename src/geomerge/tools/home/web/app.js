@@ -194,6 +194,60 @@ function notesPill(text, kind) {
   return span;
 }
 
+// A flag's reasons, each its own colour (flag_reasons in the project's
+// geomerge.config.yaml), or a plain "flagged" until it has any. Unknown
+// codes (since dropped from config) still show, as their raw code. What to
+// do about it is the separate follow-up status — its own column.
+const FLAG_STATUS_LABELS = { contact: "Contact", waiting: "Waiting", review: "Review" };
+
+function reasonInfo(code) {
+  return FLAG_REASONS[code] || { label: code.replace(/_/g, " "), color: "overlay1" };
+}
+
+function reasonPill(code) {
+  const info = reasonInfo(code);
+  const pill = notesPill(info.label, "reason");
+  pill.style.setProperty("--pill-accent", `var(--ctp-${info.color})`);
+  return pill;
+}
+
+function flagPills(markers, pen = "") {
+  const reasons = markers.flag_reasons || [];
+  const pills = reasons.length ? reasons.map(reasonPill) : [notesPill("flagged", "flagged")];
+  if (pen) pills[0].textContent += pen;
+  return pills;
+}
+
+// "contact" with nobody on file yet shows as "find contact" — display only,
+// never stored; it turns back into Contact once a contact's saved.
+function needsContactFound(markers) {
+  return markers.flag_status === "contact" && !markers.has_contact;
+}
+
+function statusPill(markers) {
+  const status = markers.flag_status;
+  const findContact = needsContactFound(markers);
+  const label = findContact ? "Find contact" : FLAG_STATUS_LABELS[status] || status;
+  const pill = notesPill(label, findContact ? "status-find-contact" : `status-${status}`);
+  if (markers.flag_status_date) pill.title = `${FLAG_STATUS_LABELS[status] || status} since ${markers.flag_status_date}`;
+  if (findContact) pill.title = `No contact recorded yet${pill.title ? ` · ${pill.title}` : ""}`;
+  return pill;
+}
+
+// The Follow-up column: a flag's status, or nothing. Opens the same popout.
+function followUpCell(markers, onOpen) {
+  const td = document.createElement("td");
+  td.className = "followup-cell";
+  if (!markers.flagged) return td;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "notes-trigger";
+  btn.appendChild(statusPill(markers));
+  btn.addEventListener("click", onOpen);
+  td.appendChild(btn);
+  return td;
+}
+
 function notesCell(markers, onOpen) {
   const td = document.createElement("td");
   td.className = "notes-cell";
@@ -201,10 +255,12 @@ function notesCell(markers, onOpen) {
   btn.type = "button";
   btn.className = "notes-trigger";
   const pen = markers.notes ? " ✎" : "";
-  if (markers.flagged) btn.appendChild(notesPill(`flagged${pen}`, "flagged"));
+  if (markers.flagged) btn.append(...flagPills(markers, pen));
   if (markers.excluded) btn.appendChild(notesPill(`excluded${markers.flagged ? "" : pen}`, "excluded"));
   if (markers.notes && !markers.flagged && !markers.excluded) btn.appendChild(notesPill("note", "note"));
-  if (markers.class_notes) btn.appendChild(notesPill(`${markers.class_notes} class`, "class"));
+  // A flagged source's reasons already say what's wrong; its class notes
+  // are still in the popout.
+  if (markers.class_notes && !markers.flagged) btn.appendChild(notesPill(`${markers.class_notes} class`, "class"));
   if (!btn.childNodes.length) {
     btn.classList.add("notes-empty");
     btn.textContent = "+ note";
@@ -219,7 +275,7 @@ function notesCell(markers, onOpen) {
 // what needs doing, where the source stands, its link, whether there's a
 // contact, a link to the full metadata. Edit swaps in the fields.
 let notesTarget = null; // {kind: "source", source} | {kind: "provider", provider}
-let notesView = null; // what the summary shows: {label, note, flagged, excluded, status, links, contact, providerContact, facts, metaHref, metaText}
+let notesView = null; // what the summary shows: {label, note, flagged, flag_reasons, flag_status, flag_status_date, excluded, status, links, contact, providerContact, facts, metaHref, metaText}
 let notesSaved = null; // the edit fields as last loaded/saved, for the dirty check
 
 function externalLink(href, text) {
@@ -274,7 +330,7 @@ function renderNotesSummary() {
   const v = notesView;
   const badges = document.getElementById("notes-sum-badges");
   badges.innerHTML = "";
-  if (v.flagged) badges.appendChild(notesPill("flagged", "flagged"));
+  if (v.flagged) badges.append(...flagPills(v), statusPill(v));
   if (v.excluded) badges.appendChild(notesPill("excluded", "excluded"));
   document.getElementById("notes-sum-status").textContent = v.status || "";
 
@@ -320,10 +376,50 @@ function renderNotesSummary() {
   });
 }
 
+// The reason chips and status picker under the Flagged checkbox. Chips are
+// toggle buttons (aria-pressed), drawn once from FLAG_REASONS plus any code
+// the current flag has that config no longer lists.
+function chosenReasons() {
+  return [...document.querySelectorAll("#notes-flag-reasons .reason-chip[aria-pressed='true']")].map(
+    (b) => b.dataset.code,
+  );
+}
+
+function renderReasonChips(selected) {
+  const wrap = document.getElementById("notes-flag-reasons");
+  wrap.innerHTML = "";
+  const codes = [...Object.keys(FLAG_REASONS), ...selected.filter((c) => !(c in FLAG_REASONS))];
+  for (const code of codes) {
+    const info = reasonInfo(code);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "reason-chip";
+    b.style.setProperty("--pill-accent", `var(--ctp-${info.color})`);
+    b.dataset.code = code;
+    b.textContent = info.label;
+    b.setAttribute("aria-pressed", selected.includes(code) ? "true" : "false");
+    b.addEventListener("click", () => {
+      b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
+      updateNotesSaveButton();
+    });
+    wrap.appendChild(b);
+  }
+}
+
+function updateFlagDetailVisibility() {
+  const flagged = document.getElementById("notes-modal-flagged").checked;
+  document.getElementById("notes-flag-detail").classList.toggle("hidden", !flagged);
+}
+
+const statusSelect = document.getElementById("notes-flag-status");
+for (const st of FLAG_STATUSES) statusSelect.add(new Option(FLAG_STATUS_LABELS[st] || st, st));
+
 function notesFormState() {
   return JSON.stringify([
     document.getElementById("notes-modal-text").value.trim(),
     document.getElementById("notes-modal-flagged").checked,
+    chosenReasons(),
+    document.getElementById("notes-flag-status").value,
     document.getElementById("notes-modal-excluded").checked,
     document.getElementById("notes-modal-contact").value.trim(),
   ]);
@@ -348,6 +444,10 @@ function updateNotesSaveButton() {
 function fillNotesForm() {
   const v = notesView;
   document.getElementById("notes-modal-flagged").checked = !!v.flagged;
+  renderReasonChips(v.flag_reasons || []);
+  document.getElementById("notes-flag-status").value = v.flag_status || FLAG_STATUSES[FLAG_STATUSES.length - 1];
+  document.getElementById("notes-flag-status-date").textContent = v.flag_status_date ? `since ${v.flag_status_date}` : "";
+  updateFlagDetailVisibility();
   document.getElementById("notes-modal-excluded").checked = !!v.excluded;
   document.getElementById("notes-modal-contact").value = v.contact || "";
   const hint = document.getElementById("notes-modal-contact-hint");
@@ -408,6 +508,10 @@ function sourceView(s, details) {
   return {
     note: s.markers.notes,
     flagged: s.markers.flagged,
+    flag_reasons: s.markers.flag_reasons || [],
+    flag_status: s.markers.flag_status || "",
+    flag_status_date: s.markers.flag_status_date || "",
+    has_contact: details ? !!(d.contact || d.provider_contact) : s.markers.has_contact,
     excluded: s.markers.excluded,
     status: pipelineSummary(s),
     sourceUrl: d.dataset_page_url || "",
@@ -424,6 +528,10 @@ function providerView(p) {
   return {
     note: p.notes,
     flagged: true,
+    flag_reasons: p.flag_reasons || [],
+    flag_status: p.flag_status || "",
+    flag_status_date: p.flag_status_date || "",
+    has_contact: !!(p.contact || "").trim(),
     excluded: false,
     status: p.source_ids.length
       ? `Provider follow-up · ${p.source_ids.length} source${p.source_ids.length === 1 ? "" : "s"}`
@@ -480,7 +588,7 @@ async function openNotesModal(target) {
   }
   if (notesTarget !== target) return; // closed or switched while loading
   path.textContent = data.path;
-  s.markers = { ...s.markers, notes: data.notes, flagged: data.flagged, excluded: data.excluded };
+  s.markers = { ...s.markers, ...flagFields(data), notes: data.notes, excluded: data.excluded };
   notesView = sourceView(s, data.details);
   // Anything typed while this loaded is kept rather than overwritten.
   if (isNotesDirty()) {
@@ -500,6 +608,15 @@ async function openNotesModal(target) {
   }
 }
 
+function flagFields(d) {
+  return {
+    flagged: d.flagged,
+    flag_reasons: d.flag_reasons || [],
+    flag_status: d.flag_status || "",
+    flag_status_date: d.flag_status_date || "",
+  };
+}
+
 async function postJson(url, body) {
   const res = await fetch(url, {
     method: "POST",
@@ -515,6 +632,9 @@ async function saveNotesModal() {
   if (!notesTarget || !isNotesDirty()) return;
   const notes = document.getElementById("notes-modal-text").value.trim();
   const flagged = document.getElementById("notes-modal-flagged").checked;
+  const flag = flagged
+    ? { flagged, flag_reasons: chosenReasons(), flag_status: document.getElementById("notes-flag-status").value }
+    : { flagged };
   const excluded = document.getElementById("notes-modal-excluded").checked;
   const contact = document.getElementById("notes-modal-contact").value.trim();
   setNotesStatus("Saving…");
@@ -524,24 +644,27 @@ async function saveNotesModal() {
       const s = notesTarget.source;
       if (excluded !== s.markers.excluded) message = "Saved ✓ — takes effect on the next pipeline run";
       const saved = await postJson(`/api/source_notes/${encodeURIComponent(s.source_id)}`, {
-        notes, flagged, excluded, contact,
+        notes, ...flag, excluded, contact,
       });
-      s.markers = { ...s.markers, notes: saved.notes, flagged: saved.flagged, excluded: saved.excluded };
-      notesView = { ...notesView, note: saved.notes, flagged: saved.flagged, excluded: saved.excluded, contact, status: pipelineSummary(s) };
+      const hasContact = !!(contact || notesView.providerContact);
+      s.markers = { ...s.markers, ...flagFields(saved), notes: saved.notes, excluded: saved.excluded, has_contact: hasContact };
+      notesView = { ...notesView, ...flagFields(saved), note: saved.notes, excluded: saved.excluded, contact, has_contact: hasContact, status: pipelineSummary(s) };
     } else {
       const p = notesTarget.provider;
       await postJson("/collection/api/note", { row_index: p.row_index, notes });
-      await postJson("/collection/api/flag", { row_index: p.row_index, flagged });
+      const savedFlag = await postJson("/collection/api/flag", { row_index: p.row_index, ...flag });
+      Object.assign(p, flagFields(savedFlag));
       if (contact !== (p.contact || "")) {
         await postJson("/collection/api/contact", { row_index: p.row_index, contact });
       }
       p.notes = notes;
       p.contact = contact;
+      p.has_contact = !!contact;
       if (!flagged) {
         flaggedProviders = flaggedProviders.filter((x) => x !== p);
         message = "Saved ✓ — unflagged, so it'll leave this list";
       }
-      notesView = { ...notesView, note: notes, flagged, contact };
+      notesView = { ...notesView, ...flagFields(savedFlag), note: notes, contact, has_contact: !!contact };
     }
   } catch (e) {
     setNotesStatus(`Failed to save: ${e.message}`);
@@ -562,9 +685,10 @@ document.getElementById("notes-modal-text").addEventListener("input", () => {
   growNoteInput();
   updateNotesSaveButton();
 });
-for (const id of ["notes-modal-contact", "notes-modal-flagged", "notes-modal-excluded"]) {
+for (const id of ["notes-modal-contact", "notes-modal-flagged", "notes-modal-excluded", "notes-flag-status"]) {
   document.getElementById(id).addEventListener("input", updateNotesSaveButton);
 }
+document.getElementById("notes-modal-flagged").addEventListener("input", updateFlagDetailVisibility);
 document.getElementById("notes-modal-save").addEventListener("click", saveNotesModal);
 document.getElementById("notes-modal-close").addEventListener("click", closeNotesModal);
 // A click outside the panel closes it only when nothing's unsaved, so a
@@ -617,7 +741,10 @@ function renderProviderRow(p) {
   rest.append(link, text);
   tr.appendChild(rest);
 
-  tr.appendChild(notesCell({ notes: p.notes, flagged: true }, () => openNotesModal({ kind: "provider", provider: p })));
+  const markers = { ...flagFields(p), notes: p.notes, flagged: true, has_contact: p.has_contact };
+  const open = () => openNotesModal({ kind: "provider", provider: p });
+  tr.appendChild(notesCell(markers, open));
+  tr.appendChild(followUpCell(markers, open));
   return tr;
 }
 
@@ -643,7 +770,9 @@ function renderRow(s) {
   tr.appendChild(pipelineCell(s.pipeline.processing, s.source_id, "processing", true));
   tr.appendChild(plainCell(s.pipeline.validation));
 
-  tr.appendChild(notesCell(s.markers, () => openNotesModal({ kind: "source", source: s })));
+  const open = () => openNotesModal({ kind: "source", source: s });
+  tr.appendChild(notesCell(s.markers, open));
+  tr.appendChild(followUpCell(s.markers, open));
 
   return tr;
 }
@@ -681,8 +810,9 @@ function render() {
   } else if (filterMode === "incomplete") {
     visible = sources.filter((s) => !isRowComplete(s));
   } else if (filterMode === "flagged") {
-    visible = sources.filter((s) => s.markers.flagged);
-    providerRows = flaggedProviders;
+    const match = flagMatcher(document.getElementById("flag-filter").value);
+    visible = sources.filter((s) => s.markers.flagged && match(s.markers));
+    providerRows = flaggedProviders.filter(match);
   } else if (filterMode === "excluded") {
     visible = sources.filter((s) => s.markers.excluded);
   }
@@ -703,9 +833,15 @@ function render() {
   const completeCount = sources.filter(isRowComplete).length;
   const flaggedCount = sources.filter((s) => s.markers.flagged).length;
   const excludedCount = sources.filter((s) => s.markers.excluded).length;
+  const flags = [...sources.filter((s) => s.markers.flagged).map((s) => s.markers), ...flaggedProviders];
+  const byStatus = FLAG_STATUSES.map((st) => {
+    const n = flags.filter((m) => m.flag_status === st).length;
+    const find = st === "contact" ? flags.filter(needsContactFound).length : 0;
+    return `${n} ${st}${find ? ` (${find} to find)` : ""}`;
+  }).join(" / ");
   document.getElementById("summary").textContent =
     `${completeCount} / ${sources.length} sources complete · ${flaggedCount} flagged · ` +
-    `${flaggedProviders.length} flagged providers · ${excludedCount} excluded`;
+    `${flaggedProviders.length} flagged providers · follow-ups: ${byStatus} · ${excludedCount} excluded`;
 }
 
 async function load() {
@@ -716,10 +852,12 @@ async function load() {
   await loadStatusTable({
     footerId: "summary",
     nameCell,
-    statusColumns: 8, boundaryColumns: [0, 2, 5, 7],
+    statusColumns: 9, boundaryColumns: [0, 2, 5, 7],
     onLoaded: async (data) => {
       sources = data;
-      flaggedProviders = await providersPromise;
+      // Same field a source row gets from server.py, so the filter, footer
+      // and Follow-up cell treat both kinds of row alike.
+      flaggedProviders = (await providersPromise).map((p) => ({ ...p, has_contact: !!(p.contact || "").trim() }));
       render();
     },
   });
@@ -727,11 +865,58 @@ async function load() {
 
 document.getElementById("refresh-btn").addEventListener("click", load);
 
+// The Flagged filter's own narrowing select: "status:waiting",
+// "reason:data_too_old", "reason:" (no reason yet) or "" (all).
+function flagMatcher(value) {
+  if (!value) return () => true;
+  const [kind, arg] = value.split(":");
+  if (kind === "status" && arg === "find-contact") return needsContactFound;
+  if (kind === "status") return (m) => m.flag_status === arg;
+  if (kind === "reason") return (m) => (arg ? (m.flag_reasons || []).includes(arg) : !(m.flag_reasons || []).length);
+  return () => true;
+}
+
+function fillFlagFilter() {
+  const sel = document.getElementById("flag-filter");
+  sel.add(new Option("All flags", ""));
+  const group = (label, options) => {
+    const g = document.createElement("optgroup");
+    g.label = label;
+    for (const [text, value] of options) g.appendChild(new Option(text, value));
+    sel.appendChild(g);
+  };
+  group("Follow-up", [
+    ...FLAG_STATUSES.map((st) => [FLAG_STATUS_LABELS[st] || st, `status:${st}`]),
+    ["Find contact (no contact yet)", "status:find-contact"],
+  ]);
+  group("Reason", [
+    ...Object.entries(FLAG_REASONS).map(([code, info]) => [info.label, `reason:${code}`]),
+    ["No reason yet", "reason:"],
+  ]);
+}
+fillFlagFilter();
+
 const filterSelect = document.getElementById("filter-mode");
-const savedFilter = localStorage.getItem("home-filter-mode");
-if (savedFilter) filterSelect.value = savedFilter;
+const flagFilterSelect = document.getElementById("flag-filter");
+function updateFlagFilterVisibility() {
+  flagFilterSelect.classList.toggle("hidden", filterSelect.value !== "flagged");
+}
+try {
+  const savedFilter = localStorage.getItem("home-filter-mode");
+  if (savedFilter) filterSelect.value = savedFilter;
+  const savedFlagFilter = localStorage.getItem("home-flag-filter");
+  if (savedFlagFilter && [...flagFilterSelect.options].some((o) => o.value === savedFlagFilter)) {
+    flagFilterSelect.value = savedFlagFilter;
+  }
+} catch {}
+updateFlagFilterVisibility();
 filterSelect.addEventListener("change", () => {
-  localStorage.setItem("home-filter-mode", filterSelect.value);
+  try { localStorage.setItem("home-filter-mode", filterSelect.value); } catch {}
+  updateFlagFilterVisibility();
+  if (sources) render();
+});
+flagFilterSelect.addEventListener("change", () => {
+  try { localStorage.setItem("home-flag-filter", flagFilterSelect.value); } catch {}
   if (sources) render();
 });
 

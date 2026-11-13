@@ -17,6 +17,9 @@
       <option value="flagged">Flagged</option>
       <option value="excluded">Excluded</option>
     </select>
+    <!-- Narrows the Flagged filter — by follow-up status or reason
+         (app.js's fillFlagFilter fills it from the project's flag_reasons). -->
+    <select id="flag-filter" class="hidden"></select>
   </label>
 {% endblock %}
 
@@ -36,6 +39,7 @@
         <col style="width: 96px" />
         <col style="width: 116px" />
         <col style="width: 140px" />
+        <col style="width: 104px" />
       </colgroup>
       <thead>
         <tr>
@@ -51,11 +55,12 @@
             <button id="refresh-btn" class="refresh-btn" title="Refresh status">&#8635;</button>
           </th>
           <th class="group-boundary">Notes</th>
+          <th>Follow-up</th>
         </tr>
       </thead>
       <tbody id="rows-body"></tbody>
       <tfoot>
-        <tr><td colspan="9"></td></tr>
+        <tr><td colspan="10"></td></tr>
       </tfoot>
     </table>
   </div>
@@ -122,6 +127,16 @@
             <input type="checkbox" id="notes-modal-flagged" />
             <span><strong>Flagged</strong> <span class="meta">— something needs doing</span></span>
           </label>
+          <!-- Only while Flagged is ticked: why (any number of the project's
+               flag_reasons) and where the follow-up stands. -->
+          <div id="notes-flag-detail" class="notes-flag-detail hidden">
+            <div id="notes-flag-reasons" class="notes-flag-reasons"></div>
+            <label class="notes-flag-status">
+              Follow-up
+              <select id="notes-flag-status"></select>
+              <span id="notes-flag-status-date" class="meta"></span>
+            </label>
+          </div>
           <label id="notes-modal-excluded-wrap" class="notes-check">
             <input type="checkbox" id="notes-modal-excluded" />
             <span><strong>Exclude from pipeline</strong> <span class="meta">— skipped by preprocessing, processing and merge</span></span>
@@ -156,5 +171,10 @@
 
 {% block scripts %}
   <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
+  <script>
+    // As [code, info] pairs: tojson sorts object keys, losing config order.
+    const FLAG_REASONS = Object.fromEntries({{ flag_reasons.items() | list | tojson }});
+    const FLAG_STATUSES = {{ flag_statuses | tojson }};
+  </script>
   <script src="app.js"></script>
 {% endblock %}

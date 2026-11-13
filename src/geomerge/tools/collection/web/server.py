@@ -20,6 +20,7 @@ from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config, stage_output_dir
 from geomerge.helpers.file_cache import cached_yaml
+from geomerge.helpers.source_notes import FLAG_FIELDS, apply_flag_changes, flag_markers
 from geomerge.helpers.status import COMPLETE, MISSING, NONE, PARTIAL
 
 
@@ -392,19 +393,37 @@ def create_blueprint(config: dict = None) -> Blueprint:
         save_checklist(df)
         return jsonify({"ok": True})
 
+    # flagged, plus optionally flag_reasons (list of codes) and flag_status —
+    # the same rules as a source's own flag (helpers/source_notes.py), stored
+    # here as columns, reasons ";"-separated. Clearing the flag clears them.
     @bp.route("/api/flag", methods=["POST"])
     def api_flag():
         data = request.get_json()
         row_index = int(data["row_index"])
-        flagged = bool(data.get("flagged"))
 
         df = load_checklist()
         if row_index not in df.index:
             return jsonify({"error": "row not found"}), 404
+        for col in ("flagged", *FLAG_FIELDS):
+            if col not in df.columns:
+                df[col] = ""
 
-        df.at[row_index, "flagged"] = "x" if flagged else ""
+        row = df.loc[row_index]
+        current = flag_markers(
+            row["flagged"] == "x", row["flag_reasons"], row["flag_status"], row["flag_status_date"]
+        )
+        changes = {k: data[k] for k in ("flagged", "flag_reasons", "flag_status") if k in data}
+        try:
+            markers = apply_flag_changes(current, changes)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+        df.at[row_index, "flagged"] = "x" if markers["flagged"] else ""
+        df.at[row_index, "flag_reasons"] = ";".join(markers["flag_reasons"])
+        df.at[row_index, "flag_status"] = markers["flag_status"]
+        df.at[row_index, "flag_status_date"] = markers["flag_status_date"]
         save_checklist(df)
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, **markers})
 
     @bp.route("/api/generate", methods=["POST"])
     def api_generate():
