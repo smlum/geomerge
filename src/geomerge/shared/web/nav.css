@@ -66,7 +66,7 @@
 
 /* A small accent palette for tab identity, kept deliberately distinct from
    the status-badge palette (green/yellow/red — those mean complete/warning/
-   missing) so a colored tab never reads as a status. All seven now in use,
+   missing) so a colored tab never reads as a status. All eight now in use,
    one per tab. Each color shows on hover too (a preview of that tab's
    identity) as well as when active — hover doesn't get the bold weight,
    so it still reads as "not the current page".
@@ -107,6 +107,12 @@
   color: var(--ctp-pink);
 }
 
+.geomerge-tab.active.tab-flamingo,
+.geomerge-tab.tab-flamingo:hover {
+  background: color-mix(in srgb, var(--ctp-flamingo) 18%, var(--color-panel-bg));
+  color: var(--ctp-flamingo);
+}
+
 .geomerge-tab.active.tab-cyan,
 .geomerge-tab.tab-cyan:hover {
   background: color-mix(in srgb, var(--ctp-sapphire) 18%, var(--color-panel-bg));
@@ -129,8 +135,50 @@
    [data-theme], same as every color in the app) rather than sitting fixed
    in the track — a fixed-icon track was tried first and looked cluttered,
    the two icons' glyph bounds overlapping the knob at this control's size. */
-.theme-toggle {
+/* Docs: right of the tabs, beside the theme toggle — opens base.html's
+   #docs-modal (text in templates/_docs.html). */
+.docs-btn {
   margin-left: auto;
+  font-family: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.docs-btn:hover {
+  color: var(--color-text);
+  background: var(--ctp-surface0);
+}
+
+.docs-panel {
+  max-width: 40rem;
+}
+
+.docs-body {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.docs-body h3 {
+  margin: 1rem 0 0.3rem;
+  font-size: 0.95rem;
+}
+
+.docs-body h3:first-child {
+  margin-top: 0;
+}
+
+.docs-body p,
+.docs-body ul,
+.docs-body ol {
+  margin: 0 0 0.5rem;
+}
+
+.theme-toggle {
   border: none;
   background: none;
   padding: 0;

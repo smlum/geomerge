@@ -12,4 +12,5 @@ NAV_TABS = [
     {"id": "process", "label": "Process", "href": "/pipeline/", "color": "teal"},
     {"id": "validate", "label": "Validate", "href": "/validate/", "color": "pink"},
     {"id": "explore", "label": "Explore", "href": "/explore/", "color": "cyan"},
+    {"id": "publish", "label": "Publish", "href": "/publish/", "color": "flamingo"},
 ]

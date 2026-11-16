@@ -414,3 +414,16 @@ td.meta-cell {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
 }
+
+/* A tab that isn't built yet (e.g. Publish): one short panel. */
+.placeholder-panel {
+  max-width: 40rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 8px;
+  background: var(--color-panel-bg);
+}
+
+.placeholder-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}

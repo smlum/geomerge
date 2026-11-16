@@ -62,6 +62,7 @@ from geomerge.tools.pipeline.web.server import create_blueprint as create_pipeli
 from geomerge.tools.prep.web.server import create_blueprint as create_prep_blueprint
 from geomerge.tools.setup.web.server import create_blueprint as create_setup_blueprint
 from geomerge.tools.validate.web.server import create_blueprint as create_validate_blueprint
+from geomerge.tools.publish.web.server import create_blueprint as create_publish_blueprint
 
 
 def create_app(config: dict = None) -> Flask:
@@ -101,6 +102,7 @@ def create_app(config: dict = None) -> Flask:
     app.register_blueprint(create_prep_blueprint(config), url_prefix="/prep")
     app.register_blueprint(create_pipeline_blueprint(config), url_prefix="/pipeline")
     app.register_blueprint(create_validate_blueprint(config), url_prefix="/validate")
+    app.register_blueprint(create_publish_blueprint(config), url_prefix="/publish")
     # Read-only views over the merged output — not per-source either.
     app.register_blueprint(create_explore_blueprint(config), url_prefix="/explore")
     app.register_blueprint(create_column_mapping_blueprint(config), url_prefix="/column-mapping")

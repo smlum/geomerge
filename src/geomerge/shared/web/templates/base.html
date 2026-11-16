@@ -22,6 +22,7 @@
       <a href="{{ tab.href }}" class="geomerge-tab{{ ' active' if tab.id == active_tab }} tab-{{ tab.color }}">{{ tab.label }}</a>
       {% endfor %}
     </div>
+    <button type="button" class="docs-btn" id="docs-btn">Docs</button>
     <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
       <span class="theme-toggle-track">
         <span class="theme-toggle-knob">
@@ -42,10 +43,29 @@
   </footer>
 
   {% block modals %}{% endblock %}
+  <div id="docs-modal" class="modal-overlay hidden">
+    <div class="modal-panel docs-panel">
+      <div class="modal-header">
+        <h2>Docs</h2>
+        <button id="docs-close" class="modal-close" type="button">&times;</button>
+      </div>
+      <div class="docs-body">{% include "_docs.html" %}</div>
+    </div>
+  </div>
   {% if include_source_card %}{% include "_source_card_modal.html" %}{% endif %}
 
   {% block scripts_pre %}{% endblock %}
   <script src="/nav.js"></script>
+  <script>
+    (() => {
+      const modal = document.getElementById("docs-modal");
+      const close = () => modal.classList.add("hidden");
+      document.getElementById("docs-btn").addEventListener("click", () => modal.classList.remove("hidden"));
+      document.getElementById("docs-close").addEventListener("click", close);
+      modal.addEventListener("click", (e) => e.target === modal && close());
+      document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+    })();
+  </script>
   {% if include_source_card %}<script src="/source-card.js"></script>{% endif %}
   {% block scripts %}{% endblock %}
   {% if include_source_card %}

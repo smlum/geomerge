@@ -1,0 +1,26 @@
+{# The Docs popup's text (nav "Docs", base.html). Plain HTML — edit freely. #}
+<h3>What this is</h3>
+<p>A UI for a config-driven pipeline. Everything lives in plain files (YAML, CSV) that the UI reads and edits — the UI is a surface for reviewing those files, running the pipeline and checking what comes out.</p>
+
+<h3>Workflow</h3>
+<ol>
+  <li><strong>Setup</strong> — target schema, matching rules for columns and classes.</li>
+  <li><strong>Collect</strong> — work through the provider checklist: find each dataset, complete its metadata, download the raw data.</li>
+  <li><strong>Prepare</strong> — map raw columns to the schema, run preprocessing, classify source values.</li>
+  <li><strong>Process</strong> — filter, add classified columns, calculate lengths, standardize geometry and formats, assign StatCan geographies, dedupe, merge.</li>
+  <li><strong>Validate</strong> — checks the data has to pass. <em>(not built yet)</em></li>
+  <li><strong>Explore</strong> — maps and summaries of the results.</li>
+  <li><strong>Publish</strong> — the final release. <em>(not built yet)</em></li>
+</ol>
+
+<h3>Notes and flags</h3>
+<ul>
+  <li>Flag anything that needs doing; the note says what. Flags never change the pipeline — "excluded" does.</li>
+  <li>Review them on Home (Flagged view), or share <code>FOLLOWUPS.md</code> (<code>geomerge tools followups</code>).</li>
+</ul>
+
+<h3>Commands</h3>
+<ul>
+  <li><code>geomerge serve</code> — this UI.</li>
+  <li><code>geomerge pipeline run [--stage NAME] [--source ID]</code> — run the pipeline.</li>
+</ul>
