@@ -50,51 +50,21 @@ th {
   background: var(--ctp-surface0);
 }
 
-/* Opens the cross-page source-info card (see /source-card.js) — plain text
-   otherwise, cursor + hover underline are the only tell that it's
-   clickable, since it isn't a navigational link like the mauve ones
-   elsewhere. Table-cell trigger, styled distinctly from the header-identity
-   one in column-mapping/classification's own .source-label. */
-.source-card-trigger {
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  font-weight: 600;
-  color: inherit;
-  cursor: pointer;
-}
-
-.source-card-trigger:hover {
-  text-decoration: underline;
-}
-
 td a {
   text-decoration: none;
 }
 
-/* Follow-ups beside the Classify status — see app.js's classificationCell. */
-.review-marker {
-  display: inline-block;
+/* Mapping-flag pills after the Classify status ("1 conflict"). */
+.class-flag {
   margin-left: 0.4rem;
-  padding: 0.1rem 0.4rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  font-size: 0.72rem;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
 }
 
-.review-marker-flagged,
-.review-marker-unsure {
-  border-color: var(--ctp-yellow);
-  color: var(--ctp-yellow);
+td.notes-cell {
+  overflow: hidden;
 }
 
-.review-marker-conflict {
-  border-color: var(--ctp-red);
-  color: var(--ctp-red);
+td.notes-cell .notes-pill + .notes-pill {
+  margin-left: 0.25rem;
 }
 
 /* Classification can't start yet (flagged upstream, or mapping/preprocessing

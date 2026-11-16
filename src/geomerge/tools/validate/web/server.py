@@ -19,6 +19,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template
 
 from geomerge.helpers.config import load_config
+from geomerge.tools.collection.status import source_provider, source_title
 from geomerge.helpers.status import NOT_BUILT
 
 
@@ -40,7 +41,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/")
     def index():
-        return render_template("validate/index.html", active_tab="validate")
+        return render_template("validate/index.html", active_tab="validate", include_source_card=True)
 
     @bp.route("/api/sources")
     def api_sources():
@@ -48,6 +49,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
         for source_id in source_ids():
             result.append({
                 "source_id": source_id,
+                "provider": source_provider(source_id, config),
+                "title": source_title(source_id, config),
                 # Placeholder — no automated-check step exists yet
                 # (geomerge.config.yaml's "validate" stage is still commented
                 # out) — "not_built" rather than "not_started" so it doesn't

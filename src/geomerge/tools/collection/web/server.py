@@ -20,7 +20,7 @@ from flask import Blueprint, jsonify, render_template, request
 
 from geomerge.helpers.config import load_config, stage_output_dir
 from geomerge.helpers.file_cache import cached_yaml
-from geomerge.helpers.source_notes import FLAG_FIELDS, apply_flag_changes, flag_markers
+from geomerge.helpers.source_notes import FLAG_FIELDS, FLAG_STATUSES, apply_flag_changes, flag_markers, flag_reasons
 from geomerge.helpers.status import COMPLETE, MISSING, NONE, PARTIAL
 
 
@@ -31,7 +31,7 @@ def slugify(text: str) -> str:
 
 
 EDITABLE_FIELDS = [
-    "dataset_page_url", "download_url", "format", "license_name", "license_url",
+    "dataset_title", "dataset_page_url", "download_url", "format", "license_name", "license_url",
     "open_license", "contact", "source_updated_date", "retrieved_date",
     "data_dictionary_url", "raw_filename", "notes",
 ]
@@ -75,10 +75,40 @@ def create_blueprint(config: dict = None) -> Blueprint:
     )
 
     def load_checklist() -> pd.DataFrame:
-        return pd.read_csv(checklist_csv, dtype=str).fillna("")
+        df = pd.read_csv(checklist_csv, dtype=str).fillna("")
+        # outcome: found | not_found | "" (not checked yet) — what Found/Not
+        # found decided, kept separately from source_url so a not-found row
+        # can still keep the link to what was there (e.g. a PDF). Older rows
+        # predate it: derived from the old rule (checked + source_url =
+        # found), and written back on the next save.
+        if "outcome" not in df.columns:
+            df["outcome"] = ""
+        legacy = (df["outcome"] == "") & (df["checked"] != "")
+        df.loc[legacy & (df["source_url"] != ""), "outcome"] = "found"
+        df.loc[legacy & (df["source_url"] == ""), "outcome"] = "not_found"
+        return df
 
     def save_checklist(df: pd.DataFrame):
         df.to_csv(checklist_csv, index=False)
+
+    def apply_row_flag(df: pd.DataFrame, row_index: int, data: dict) -> dict:
+        """Applies any of data's flagged/flag_reasons/flag_status to one
+        checklist row in place (not saved). Raises ValueError on a bad
+        reason list or status."""
+        for col in ("flagged", *FLAG_FIELDS):
+            if col not in df.columns:
+                df[col] = ""
+        row = df.loc[row_index]
+        current = flag_markers(
+            row["flagged"] == "x", row["flag_reasons"], row["flag_status"], row["flag_status_date"]
+        )
+        changes = {k: data[k] for k in ("flagged", "flag_reasons", "flag_status") if k in data}
+        markers = apply_flag_changes(current, changes)
+        df.at[row_index, "flagged"] = "x" if markers["flagged"] else ""
+        df.at[row_index, "flag_reasons"] = ";".join(markers["flag_reasons"])
+        df.at[row_index, "flag_status"] = markers["flag_status"]
+        df.at[row_index, "flag_status_date"] = markers["flag_status_date"]
+        return markers
 
     def load_schema() -> dict:
         return yaml.safe_load(schema_yaml.read_text())
@@ -130,55 +160,59 @@ def create_blueprint(config: dict = None) -> Blueprint:
             n += 1
         return f"{provider_id}_cycling_{n}"
 
-    def metadata_status(row) -> str:
-        """missing | partial | complete | none (none = no confirmed source_url
-        yet). A provider can have several sources; this is the worst of
-        them — complete only once every one of them is, missing if any
-        hasn't even been generated yet."""
-        if not row["source_url"]:
-            return NONE
-        source_ids = source_ids_for(row)
-        if not source_ids:
-            return MISSING
+    def source_status(source_id: str) -> dict:
+        """One source's own metadata/raw status and dataset link — what the
+        provider-level rollups below are made of, and what the table's
+        hover text lists for a provider with several sources."""
+        yaml_path = yaml_path_for(source_id)
+        if not yaml_path.exists():
+            return {"source_id": source_id, "url": "", "metadata": MISSING, "raw": MISSING}
+        data = cached_yaml(yaml_path)
         req = required_fields()
-        statuses = []
-        for source_id in source_ids:
-            yaml_path = yaml_path_for(source_id)
-            if not yaml_path.exists():
-                statuses.append(MISSING)
-                continue
-            data = cached_yaml(yaml_path)
-            statuses.append(COMPLETE if all(str(data.get(f, "")).strip() for f in req) else PARTIAL)
-        if all(s == COMPLETE for s in statuses):
+        raw_filename = data.get("raw_filename")
+        return {
+            "source_id": source_id,
+            "url": data.get("dataset_page_url") or "",
+            "metadata": COMPLETE if all(str(data.get(f, "")).strip() for f in req) else PARTIAL,
+            "raw": COMPLETE if raw_filename and (raw_dir / source_id / raw_filename).exists() else MISSING,
+        }
+
+    def metadata_status(row, sources=None) -> str:
+        """missing | partial | complete | none (none = not marked found). A
+        provider can have several sources; this is the worst of them —
+        complete only once every one of them is, missing if any hasn't even
+        been generated yet."""
+        if row["outcome"] != "found":
+            return NONE
+        sources = sources if sources is not None else [source_status(s) for s in source_ids_for(row)]
+        if not sources:
+            return MISSING
+        statuses = [s["metadata"] for s in sources]
+        if all(st == COMPLETE for st in statuses):
             return COMPLETE
-        if any(s == MISSING for s in statuses):
+        if any(st == MISSING for st in statuses):
             return MISSING
         return PARTIAL
 
-    def raw_data_status(row) -> str:
-        """missing | complete | none (none = no confirmed source_url yet) —
-        is each source's declared raw_filename actually sitting under
+    def raw_data_status(row, sources=None) -> str:
+        """missing | complete | none (none = not marked found) — is each
+        source's declared raw_filename actually sitting under
         data/raw/<source_id>/? complete only once every source's file is
         there; declaring a filename doesn't mean it's been downloaded yet,
         so this checks disk directly."""
-        if not row["source_url"]:
+        if row["outcome"] != "found":
             return NONE
-        source_ids = source_ids_for(row)
-        if not source_ids:
+        sources = sources if sources is not None else [source_status(s) for s in source_ids_for(row)]
+        if not sources or any(s["raw"] != COMPLETE for s in sources):
             return MISSING
-        for source_id in source_ids:
-            yaml_path = yaml_path_for(source_id)
-            if not yaml_path.exists():
-                return MISSING
-            data = cached_yaml(yaml_path)
-            raw_filename = data.get("raw_filename")
-            if not raw_filename or not (raw_dir / source_id / raw_filename).exists():
-                return MISSING
         return COMPLETE
 
     @bp.route("/")
     def index():
-        return render_template("collection/index.html", active_tab="collect")
+        return render_template(
+            "collection/index.html", active_tab="collect",
+            flag_reasons=flag_reasons(config), flag_statuses=list(FLAG_STATUSES),
+        )
 
     @bp.route("/api/meta")
     def api_meta():
@@ -194,9 +228,25 @@ def create_blueprint(config: dict = None) -> Blueprint:
     @bp.route("/api/rows")
     def api_rows():
         df = load_checklist().reset_index().rename(columns={"index": "row_index"})
-        df["metadata_status"] = df.apply(metadata_status, axis=1)
-        df["raw_data_status"] = df.apply(raw_data_status, axis=1)
-        return jsonify(df.to_dict(orient="records"))
+        records = df.to_dict(orient="records")
+        for r in records:
+            sources = [source_status(s) for s in source_ids_for(r)]
+            r["sources"] = sources
+            r["metadata_status"] = metadata_status(r, sources)
+            r["raw_data_status"] = raw_data_status(r, sources)
+        # Flag fields as every reader sees them (reasons as a list), plus
+        # has_contact for the "Find contact" status pill.
+        for r in records:
+            r.update(flag_markers(
+                r.get("flagged") == "x", r.get("flag_reasons", ""), r.get("flag_status", ""), r.get("flag_status_date", "")
+            ))
+            r["has_contact"] = bool((r.get("contact") or "").strip())
+        return jsonify(records)
+
+    # The footer's clickable "editing: <path>" preview.
+    @bp.route("/api/checklist/raw")
+    def api_checklist_raw():
+        return jsonify({"content": checklist_csv.read_text(), "path": str(checklist_csv.relative_to(repo_root))})
 
     @bp.route("/api/add_row", methods=["POST"])
     def api_add_row():
@@ -221,6 +271,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
         new_row.update({"provider_id": provider_id, "name": name, "geography_level": geography_level})
         new_row.update({f: (data.get(f) or "").strip() for f in EDITABLE_ROW_FIELDS})
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        try:
+            apply_row_flag(df, len(df) - 1, data)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         save_checklist(df)
         return jsonify({"ok": True, "row_index": len(df) - 1})
 
@@ -245,6 +299,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
         df.at[row_index, "geography_level"] = geography_level
         for field in EDITABLE_ROW_FIELDS:
             df.at[row_index, field] = (data.get(field) or "").strip()
+        try:
+            apply_row_flag(df, row_index, data)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         save_checklist(df)
         return jsonify({"ok": True})
 
@@ -262,6 +320,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
         today = str(date.today())
         df.at[row_index, "source_url"] = source_url
+        df.at[row_index, "outcome"] = "found"
         df.at[row_index, "checked"] = "x"
         df.at[row_index, "checked_date"] = today
         save_checklist(df)
@@ -283,7 +342,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def api_not_found():
         data = request.get_json()
         row_index = int(data["row_index"])
-        notes = (data.get("notes") or "").strip()
+        # Whatever's in the URL box stays as source_url — e.g. a PDF that
+        # exists but isn't usable data. Not found means "no usable data",
+        # not "nothing there".
+        source_url = (data.get("source_url") or "").strip()
 
         df = load_checklist()
         if row_index not in df.index:
@@ -331,14 +393,12 @@ def create_blueprint(config: dict = None) -> Blueprint:
         today = str(date.today())
         df.at[row_index, "checked"] = "x"
         df.at[row_index, "checked_date"] = today
-        # Retract any previously recorded source_url/source_ids (e.g. correcting a
-        # mistaken "Found"). prior_url (the permanent CCND-lead reference, if any)
-        # is never touched here, so it's never lost to a retraction.
-        df.at[row_index, "source_url"] = ""
+        df.at[row_index, "outcome"] = "not_found"
+        df.at[row_index, "source_url"] = source_url
+        # Retract any previously generated sources (e.g. correcting a mistaken
+        # "Found"). prior_url (the permanent CCND-lead reference, if any) is
+        # never touched here, so it's never lost to a retraction.
         df.at[row_index, "source_ids"] = ""
-        if notes:
-            existing = df.at[row_index, "notes"]
-            df.at[row_index, "notes"] = f"{existing}; {notes}" if existing else notes
         save_checklist(df)
 
         for source_id in cleanup_ids:
@@ -404,24 +464,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
         df = load_checklist()
         if row_index not in df.index:
             return jsonify({"error": "row not found"}), 404
-        for col in ("flagged", *FLAG_FIELDS):
-            if col not in df.columns:
-                df[col] = ""
-
-        row = df.loc[row_index]
-        current = flag_markers(
-            row["flagged"] == "x", row["flag_reasons"], row["flag_status"], row["flag_status_date"]
-        )
-        changes = {k: data[k] for k in ("flagged", "flag_reasons", "flag_status") if k in data}
         try:
-            markers = apply_flag_changes(current, changes)
+            markers = apply_row_flag(df, row_index, data)
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
-
-        df.at[row_index, "flagged"] = "x" if markers["flagged"] else ""
-        df.at[row_index, "flag_reasons"] = ";".join(markers["flag_reasons"])
-        df.at[row_index, "flag_status"] = markers["flag_status"]
-        df.at[row_index, "flag_status_date"] = markers["flag_status_date"]
         save_checklist(df)
         return jsonify({"ok": True, **markers})
 
@@ -461,7 +507,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "source_id": source_id,
             "label": label,
             "provider_id": row["provider_id"],
-            "dataset_page_url": row["source_url"],
+            "dataset_title": "",
+            # The row's Data URL belongs to its first source — a later one
+            # (e.g. a separate trails layer) starts blank.
+            "dataset_page_url": "" if source_ids_for(row) else row["source_url"],
             "download_url": "",
             "format": "",
             "license_name": prefer_row("portal_license_name", "portal_license_name"),
@@ -634,6 +683,15 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
         data = yaml.safe_load(out_path.read_text()) or {}
         updates = request.get_json()
+        # A metadata.yaml from before dataset_title existed gets it slotted in
+        # just above dataset_page_url, not appended at the end.
+        if "dataset_title" in updates and "dataset_title" not in data:
+            reordered = {}
+            for key, value in data.items():
+                if key == "dataset_page_url":
+                    reordered["dataset_title"] = ""
+                reordered[key] = value
+            data = reordered
         for field in EDITABLE_FIELDS:
             if field in updates:
                 data[field] = updates[field]

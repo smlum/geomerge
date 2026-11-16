@@ -10,7 +10,7 @@
 // to provide #file-preview-modal/-title/-path/-content (modal.css chrome +
 // a .code-block.hljs <pre>, same markup shape as home's #yaml-modal) and to
 // have already loaded highlight.js + hljs-theme.css for the hljs global.
-async function openFilePreview(title, fetchUrl) {
+async function openFilePreview(title, fetchUrl, language = "yaml") {
   document.getElementById("file-preview-title").textContent = title;
   document.getElementById("file-preview-path").textContent = "";
   const content = document.getElementById("file-preview-content");
@@ -34,7 +34,7 @@ async function openFilePreview(title, fetchUrl) {
     return;
   }
   document.getElementById("file-preview-path").textContent = data.path;
-  content.innerHTML = hljs.highlight(data.content, { language: "yaml" }).value;
+  content.innerHTML = hljs.highlight(data.content, { language }).value;
 }
 
 function closeFilePreview() {

@@ -79,3 +79,67 @@ async function loadStatusTable({ footerId, nameCell, statusColumns, boundaryColu
     footer.textContent = `Failed to load statuses: ${e}`;
   }
 }
+
+// --- Provider / Prov. / Source cells -----------------------------------------
+// Every source dashboard's first three columns. Provider opens the provider
+// card (or links to Collect where the page has no card); Source shows the
+// dataset_title, else the part of the id after the provider's ("trails" for
+// ab_calgary_trails), full id on hover, and opens the source card. Rows carry
+// provider: {id, name, province} and title from the server
+// (collection/status.py's source_provider/source_title).
+function providerCell(provider) {
+  const td = document.createElement("td");
+  td.className = "name";
+  if (!provider || !provider.id) return td;
+  // Opens the provider card where the page has the card modal; otherwise a
+  // link to the provider's rows in Collect.
+  const hasCard = typeof openProviderCard === "function";
+  const el = document.createElement(hasCard ? "button" : "a");
+  el.className = "provider-link";
+  el.textContent = provider.name || provider.id;
+  el.title = `${provider.name || provider.id} (${provider.id})`;
+  if (hasCard) {
+    el.type = "button";
+    el.addEventListener("click", () => openProviderCard(provider.id));
+  } else {
+    el.href = `/collection/?q=${encodeURIComponent(provider.id)}`;
+  }
+  td.appendChild(el);
+  return td;
+}
+
+function provinceCell(province) {
+  const td = document.createElement("td");
+  td.className = "meta-cell";
+  td.textContent = province || "—";
+  return td;
+}
+
+function sourceLabel(sourceId, providerId) {
+  return providerId && sourceId.startsWith(`${providerId}_`) ? sourceId.slice(providerId.length + 1) : sourceId;
+}
+
+function sourceCell(sourceId, providerId, title = "") {
+  const td = document.createElement("td");
+  td.className = "name";
+  const hasCard = typeof openSourceCard === "function";
+  const el = document.createElement(hasCard ? "button" : "span");
+  el.className = "source-card-trigger";
+  // The publisher's dataset title when recorded, else the id's label.
+  el.textContent = title || sourceLabel(sourceId, providerId);
+  el.title = title ? `${title} — ${sourceId}` : sourceId;
+  if (hasCard) {
+    el.type = "button";
+    el.addEventListener("click", () => openSourceCard(sourceId));
+  }
+  td.appendChild(el);
+  return td;
+}
+
+// While statuses load (nav.js's placeholder rows): blank Provider and
+// Prov., then the full id.
+function placeholderNameCells(sourceId) {
+  const frag = document.createDocumentFragment();
+  frag.append(providerCell(null), provinceCell(""), sourceCell(sourceId, ""));
+  return frag;
+}

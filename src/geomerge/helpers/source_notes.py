@@ -51,7 +51,8 @@ FLAG_FIELDS = ("flag_reasons", "flag_status", "flag_status_date")
 
 
 def flag_reasons(config: dict) -> dict:
-    """{code: {"label", "color"}}, in config order."""
+    """{code: {"label", "color", "group"}}, in config order. group is an
+    optional heading for grouping reasons (e.g. FOLLOWUPS.md's sections)."""
     raw = config.get("flag_reasons") or DEFAULT_FLAG_REASONS
     out = {}
     for i, (code, spec) in enumerate(raw.items()):
@@ -60,6 +61,7 @@ def flag_reasons(config: dict) -> dict:
         out[code] = {
             "label": spec.get("label") or code.replace("_", " "),
             "color": color if color in REASON_COLORS else REASON_COLORS[i % len(REASON_COLORS)],
+            "group": spec.get("group") or "",
         }
     return out
 

@@ -5,6 +5,7 @@ those decisions).
 
     geomerge serve                                 # every tool's web UI, one process/port
     geomerge tools collection sync|process [-- script args]
+    geomerge tools followups [--output path]       # flagged sources/providers -> FOLLOWUPS.md
     geomerge pipeline run [--stage NAME] [--source ID]
     geomerge pipeline <stage-name> [--source ID]   # sugar for 'run --stage <stage-name>'
 """
@@ -41,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     collection_sub = collection_parser.add_subparsers(dest="collection_command", required=True)
     collection_sub.add_parser("sync", help="Refresh checklist.csv from providers.csv")
     collection_sub.add_parser("process", help="Stamp checked_date for rows checked outside the web UI")
+
+    followups_parser = tools_sub.add_parser("followups", help="Write flagged sources/providers to a markdown checklist")
+    followups_parser.add_argument("--output", help="Default: FOLLOWUPS.md at the repo root (or config's followups_md)")
 
     pipeline_parser = subparsers.add_parser("pipeline", help="Mechanical, no-human-in-the-loop data processing")
     pipeline_sub = pipeline_parser.add_subparsers(dest="pipeline_command", required=True)
@@ -86,6 +90,9 @@ def main(argv=None):
                 "process": process_checklist.main,
             }[args.collection_command]
             script(extras)
+        elif args.tool == "followups":
+            from geomerge.tools import followups
+            followups.main(["--output", args.output] if args.output else [])
 
     elif args.command == "pipeline":
         from geomerge.pipeline import run as pipeline_run

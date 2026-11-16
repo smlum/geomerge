@@ -18,10 +18,11 @@ from urllib.parse import quote
 from flask import Blueprint, jsonify, render_template
 
 from geomerge.helpers.config import load_config
-from geomerge.helpers.source_notes import source_markers
+from geomerge.helpers.source_notes import FLAG_STATUSES, flag_reasons, source_markers
 from geomerge.helpers.status import COMPLETE, classification_overall
 from geomerge.pipeline.status import preprocessing_status
 from geomerge.tools.classification.status import review_markers
+from geomerge.tools.collection.status import source_has_contact, source_provider, source_title
 from geomerge.tools.classification.status import source_status as classification_status
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
 
@@ -44,7 +45,10 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/")
     def index():
-        return render_template("prep/index.html", active_tab="prepare", include_source_card=True)
+        return render_template(
+            "prep/index.html", active_tab="prepare", include_source_card=True,
+            flag_reasons=flag_reasons(config), flag_statuses=list(FLAG_STATUSES),
+        )
 
     def blocked_reason(source_id: str, cm: dict, markers: dict, preprocessing: str):
         """Why classification can't start yet, or None — the same gates as
@@ -77,12 +81,12 @@ def create_blueprint(config: dict = None) -> Blueprint:
             blocked = blocked_reason(source_id, cm, markers, preprocessing)
             result.append({
                 "source_id": source_id,
+                "provider": source_provider(source_id, config),
+                "title": source_title(source_id, config),
                 "column_mapping": cm["column_map_status"],
                 # The source's one shared note/flag/exclude switch
-                # (metadata.yaml, helpers/source_notes.py) — not per stage.
-                "source_notes": markers["notes"],
-                "source_flagged": markers["flagged"],
-                "source_excluded": markers["excluded"],
+                # (metadata.yaml, helpers/source_notes.py) — the Notes column.
+                "markers": {**markers, "has_contact": source_has_contact(source_id, config)},
                 # Per-mapping review flags left during classification.
                 "classification_flag_counts": mapping_markers["flag_counts"],
                 # Mechanical, no review UI of its own — but classification

@@ -33,6 +33,7 @@ from geomerge.helpers.nav import NAV_TABS
 from geomerge.helpers.file_cache import cached_yaml
 from geomerge.helpers.source_notes import (
     FLAG_STATUSES,
+    flag_markers,
     flag_reasons,
     metadata_path,
     source_markers,
@@ -47,8 +48,11 @@ from geomerge.tools.classification.web.server import create_blueprint as create_
 from geomerge.tools.collection.status import (
     flagged_providers,
     provider_row,
+    source_has_contact,
     source_metadata_status,
+    source_provider,
     source_raw_data_status,
+    source_title,
 )
 from geomerge.tools.collection.web.server import create_blueprint as create_collection_blueprint
 from geomerge.tools.column_mapping.status import source_status as column_mapping_status
@@ -118,28 +122,23 @@ def create_app(config: dict = None) -> Flask:
     # /api/source_info/<id> (one source, for the cross-page source-card
     # modal — see /source-card.js) so the two never drift out of sync on
     # what "status" means for a given stage.
-    # Whether anyone's recorded who to ask — the source's own contact, or
-    # its provider's in checklist.csv (the popout offers to copy that one
-    # over). Turns a "contact" follow-up into "find contact" (app.js).
-    def has_contact(source_id: str) -> bool:
-        metadata = cached_yaml(metadata_path(source_id, config)) or {}
-        if (metadata.get("contact") or "").strip():
-            return True
-        return bool((provider_row(metadata.get("provider_id"), config).get("contact") or "").strip())
-
     def source_row(source_id: str) -> dict:
         cm = column_mapping_status(source_id, config)
         cls = classification_status(source_id, config)
 
         return {
             "source_id": source_id,
+            # Who publishes it (checklist.csv) — Home's Provider column, which
+            # groups a provider's sources and its provider-level flags.
+            "provider": source_provider(source_id, config),
+            "title": source_title(source_id, config),
             # The source's one shared note/flag/exclude switch (metadata.yaml,
             # helpers/source_notes.py), plus how many per-class notes it has —
             # for the Notes column and the Flagged filter (app.js).
             "markers": {
                 **source_markers(source_id, config),
                 "class_notes": len(review_markers(source_id, config)["notes"]),
-                "has_contact": has_contact(source_id),
+                "has_contact": source_has_contact(source_id, config),
             },
             # collection/ — what the collection checklist tool produces:
             # metadata.yaml and the raw file landing on disk.
@@ -270,7 +269,9 @@ def create_app(config: dict = None) -> Flask:
         row = source_row(source_id)
         row["metadata"] = {
             "provider_id": metadata.get("provider_id", ""),
+            "dataset_title": metadata.get("dataset_title", ""),
             "dataset_page_url": metadata.get("dataset_page_url", ""),
+            "portal_url": provider_row(metadata.get("provider_id"), config).get("portal_url", ""),
             "format": metadata.get("format", ""),
             "license_name": metadata.get("license_name", ""),
             "license_url": metadata.get("license_url", ""),
@@ -278,6 +279,35 @@ def create_app(config: dict = None) -> Flask:
             "notes": metadata.get("notes", ""),
         }
         return jsonify(row)
+
+    # Backs the provider card (/source-card.js's openProviderCard) — a
+    # provider's checklist.csv row plus its sources, from any dashboard's
+    # Provider column.
+    @app.route("/api/provider_info/<provider_id>")
+    def api_provider_info(provider_id):
+        row = provider_row(provider_id, config)
+        if not row:
+            return jsonify({"error": "no such provider"}), 404
+        flag = flag_markers(row.get("flagged") == "x", row.get("flag_reasons", ""),
+                            row.get("flag_status", ""), row.get("flag_status_date", ""))
+        labels = flag_reasons(config)
+        source_list = [s.strip() for s in (row.get("source_ids") or "").split(",") if s.strip()]
+        return jsonify({
+            "provider_id": provider_id,
+            "name": row.get("name") or provider_id,
+            "province": row.get("province", ""),
+            "geography_level": row.get("geography_level", ""),
+            "portal_url": row.get("portal_url", ""),
+            "license_name": row.get("portal_license_name", ""),
+            "license_url": row.get("portal_license_url", ""),
+            "contact": row.get("contact", ""),
+            "notes": row.get("notes", ""),
+            "flag": " · ".join(filter(None, [
+                ", ".join(labels.get(r, {}).get("label", r) for r in flag["flag_reasons"]),
+                flag["flag_status"].capitalize(),
+            ])) if flag["flagged"] else "",
+            "sources": [{"source_id": s, "title": source_title(s, config)} for s in source_list],
+        })
 
     return app
 

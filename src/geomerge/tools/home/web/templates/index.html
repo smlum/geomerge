@@ -3,64 +3,66 @@
 {% block title %}geomerge{% endblock %}
 
 {% block extra_head %}
+  <link rel="stylesheet" href="/flag-editor.css" />
+  <link rel="stylesheet" href="/table-filter.css" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/hljs-theme.css" />
 {% endblock %}
 
 {% block header_content %}
-  <label class="toggle">
-    Filter:
-    <select id="filter-mode">
-      <option value="all" selected>All</option>
-      <option value="complete">Complete</option>
-      <option value="incomplete">Incomplete</option>
-      <option value="flagged">Flagged</option>
-      <option value="excluded">Excluded</option>
-    </select>
-    <!-- Narrows the Flagged filter — by follow-up status or reason
-         (app.js's fillFlagFilter fills it from the project's flag_reasons). -->
-    <select id="flag-filter" class="hidden"></select>
-  </label>
+  <div class="header-filters">
+    <label class="toggle">
+      View:
+      <select id="filter-mode">
+        <option value="all" selected>All</option>
+        <option value="incomplete">Incomplete</option>
+        <option value="complete">Complete</option>
+        <!-- Flagged also lists flagged providers (checklist.csv) with no source. -->
+        <option value="flagged">Flagged</option>
+        <option value="excluded">Excluded</option>
+      </select>
+    </label>
+    <input id="table-search" class="tf-search" type="search" placeholder="Search provider, source, note…" />
+    <span id="table-summary" class="tf-summary"></span>
+  </div>
 {% endblock %}
 
 {% block content %}
   <div class="table-scroll">
     <table id="rows" class="rows-pending">
       <colgroup>
-        <!-- Each status column is just wider than its longest pill
-             ("needs review" for Map, "not applicable" for Classify), so the
-             whole table fits a ~1280px laptop window. -->
+        <!-- Status columns are just wider than their longest pill; Source
+             takes the rest. Fits a ~1280px laptop window. -->
+        <col style="width: 175px" />
+        <col style="width: 52px" />
         <col />
-        <col style="width: 92px" />
-        <col style="width: 92px" />
-        <col style="width: 118px" />
+        <col style="width: 88px" />
+        <col style="width: 90px" />
+        <col style="width: 110px" />
         <col style="width: 100px" />
-        <col style="width: 132px" />
+        <col style="width: 124px" />
         <col style="width: 96px" />
-        <col style="width: 116px" />
         <col style="width: 140px" />
-        <col style="width: 104px" />
+        <col style="width: 100px" />
       </colgroup>
       <thead>
         <tr>
-          <th>Source</th>
-          <th class="group-boundary">Metadata</th>
-          <th>Raw</th>
-          <th class="group-boundary">Map</th>
-          <th>Preprocess</th>
-          <th>Classify</th>
-          <th class="group-boundary">Process</th>
-          <th class="group-boundary">
-            Validation
-            <button id="refresh-btn" class="refresh-btn" title="Refresh status">&#8635;</button>
-          </th>
-          <th class="group-boundary">Notes</th>
-          <th>Follow-up</th>
+          <th data-col="provider">Provider</th>
+          <th data-col="province">Prov.</th>
+          <th data-col="source">Source</th>
+          <th data-col="metadata" class="group-boundary">Metadata</th>
+          <th data-col="raw">Raw</th>
+          <th data-col="map" class="group-boundary">Map</th>
+          <th data-col="preprocess">Preprocess</th>
+          <th data-col="classify">Classify</th>
+          <th data-col="process" class="group-boundary">Process</th>
+          <th data-col="notes" class="group-boundary">Notes</th>
+          <th data-col="status">Status</th>
         </tr>
       </thead>
       <tbody id="rows-body"></tbody>
       <tfoot>
-        <tr><td colspan="10"></td></tr>
+        <tr><td colspan="11"></td></tr>
       </tfoot>
     </table>
   </div>
@@ -82,7 +84,7 @@
       </div>
       <pre id="yaml-modal-content" class="code-block hljs"></pre>
       <div class="modal-actions">
-        <a id="yaml-modal-edit" class="edit-btn" href="#">Edit</a>
+        <a id="yaml-modal-edit" class="edit-btn" href="#" target="_blank" rel="noopener">Edit</a>
       </div>
     </div>
   </div>
@@ -107,39 +109,23 @@
       </div>
 
       <div class="notes-summary">
-        <div class="notes-status-line">
-          <span id="notes-sum-badges"></span>
-          <span id="notes-sum-status" class="meta"></span>
-        </div>
+        <!-- Flag + Status rows, filled by /flag-editor.js. -->
+        <dl id="notes-flag-editor"></dl>
         <textarea id="notes-modal-text" class="notes-inline" rows="2" placeholder="Add a note…"></textarea>
         <dl class="notes-facts">
-          <dt>Source</dt><dd id="notes-sum-source"></dd>
-          <dt id="notes-sum-links-label">Links</dt><dd id="notes-sum-links"></dd>
+          <dt>Links</dt><dd id="notes-sum-links"></dd>
+          <dt id="notes-sum-meta-label">Metadata</dt><dd id="notes-sum-meta"></dd>
           <dt><label for="notes-modal-contact">Contact</label></dt>
           <dd>
             <input id="notes-modal-contact" class="notes-inline-input" type="text" placeholder="None yet — email, phone or contact page URL" />
             <div id="notes-modal-contact-hint" class="meta notes-hint"></div>
           </dd>
-          <dt id="notes-sum-facts-label">Data</dt><dd id="notes-sum-facts"></dd>
+          <dt id="notes-sum-updated-label">Updated</dt><dd id="notes-sum-updated"></dd>
         </dl>
         <div class="notes-checks">
-          <label class="notes-check">
-            <input type="checkbox" id="notes-modal-flagged" />
-            <span><strong>Flagged</strong> <span class="meta">— something needs doing</span></span>
-          </label>
-          <!-- Only while Flagged is ticked: why (any number of the project's
-               flag_reasons) and where the follow-up stands. -->
-          <div id="notes-flag-detail" class="notes-flag-detail hidden">
-            <div id="notes-flag-reasons" class="notes-flag-reasons"></div>
-            <label class="notes-flag-status">
-              Follow-up
-              <select id="notes-flag-status"></select>
-              <span id="notes-flag-status-date" class="meta"></span>
-            </label>
-          </div>
           <label id="notes-modal-excluded-wrap" class="notes-check">
             <input type="checkbox" id="notes-modal-excluded" />
-            <span><strong>Exclude from pipeline</strong> <span class="meta">— skipped by preprocessing, processing and merge</span></span>
+            <span><strong>Skip in pipeline</strong></span>
           </label>
         </div>
       </div>
@@ -171,10 +157,7 @@
 
 {% block scripts %}
   <script src="/assets/vendor/highlightjs/highlight.min.js"></script>
-  <script>
-    // As [code, info] pairs: tojson sorts object keys, losing config order.
-    const FLAG_REASONS = Object.fromEntries({{ flag_reasons.items() | list | tojson }});
-    const FLAG_STATUSES = {{ flag_statuses | tojson }};
-  </script>
+  {% include "_flag_globals.html" %}
+  <script src="/table-filter.js"></script>
   <script src="app.js"></script>
 {% endblock %}

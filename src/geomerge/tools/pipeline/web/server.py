@@ -19,6 +19,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template
 
 from geomerge.helpers.config import load_config
+from geomerge.tools.collection.status import source_provider, source_title
 from geomerge.pipeline.status import processing_status
 
 
@@ -40,7 +41,7 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
     @bp.route("/")
     def index():
-        return render_template("pipeline/index.html", active_tab="process")
+        return render_template("pipeline/index.html", active_tab="process", include_source_card=True)
 
     @bp.route("/api/sources")
     def api_sources():
@@ -48,6 +49,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
         for source_id in source_ids():
             result.append({
                 "source_id": source_id,
+                "provider": source_provider(source_id, config),
+                "title": source_title(source_id, config),
                 "processing": processing_status(source_id, config),
             })
         return jsonify(result)

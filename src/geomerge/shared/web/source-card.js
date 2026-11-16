@@ -112,9 +112,17 @@ async function openSourceCard(sourceId) {
   const meta = data.metadata || {};
   let anyMeta = false;
 
+  if (meta.dataset_title) {
+    anyMeta = true;
+    metaSection.appendChild(sourceCardRow("Title", document.createTextNode(meta.dataset_title)));
+  }
   if (meta.dataset_page_url) {
     anyMeta = true;
     metaSection.appendChild(sourceCardRow("Source URL", sourceCardExternalLink(meta.dataset_page_url, "Open ↗")));
+  }
+  if (meta.portal_url) {
+    anyMeta = true;
+    metaSection.appendChild(sourceCardRow("Portal", sourceCardExternalLink(meta.portal_url, "Open ↗")));
   }
   for (const field of SOURCE_CARD_METADATA_FIELDS) {
     if (!meta[field.key]) continue;
@@ -160,4 +168,65 @@ async function openSourceCard(sourceId) {
 
 function closeSourceCard() {
   document.getElementById("source-card-modal").classList.add("hidden");
+}
+
+// Provider card — same modal, opened from a dashboard's Provider column:
+// the provider's checklist.csv details, its sources (each opens its own
+// source card) and a link to its rows in Collect.
+async function openProviderCard(providerId) {
+  document.getElementById("source-card-title").textContent = providerId;
+  const body = document.getElementById("source-card-body");
+  body.innerHTML = '<div class="source-card-empty">Loading…</div>';
+  document.getElementById("source-card-modal").classList.remove("hidden");
+
+  let res, p;
+  try {
+    res = await fetch(`/api/provider_info/${encodeURIComponent(providerId)}`);
+    p = await res.json();
+  } catch (e) {
+    body.innerHTML = `<div class="source-card-empty">Failed to load: ${e}</div>`;
+    return;
+  }
+  if (!res.ok) {
+    body.innerHTML = `<div class="source-card-empty">${p.error || "Failed to load"}</div>`;
+    return;
+  }
+  document.getElementById("source-card-title").textContent = p.name;
+  body.innerHTML = "";
+
+  const details = sourceCardSection("Provider");
+  const text = (label, value) => value && details.appendChild(sourceCardRow(label, document.createTextNode(value)));
+  text("Province", p.province);
+  text("Level", p.geography_level);
+  if (p.portal_url) details.appendChild(sourceCardRow("Portal", sourceCardExternalLink(p.portal_url, "Open ↗")));
+  if (p.license_name) {
+    const node = p.license_url ? sourceCardExternalLink(p.license_url, p.license_name) : document.createTextNode(p.license_name);
+    details.appendChild(sourceCardRow("License", node));
+  }
+  text("Contact", p.contact);
+  text("Flag", p.flag);
+  text("Notes", p.notes);
+  details.appendChild(sourceCardRow(
+    "Collect",
+    sourceCardExternalLink(`/collection/?q=${encodeURIComponent(p.provider_id)}`, "Open ↗")
+  ));
+  body.appendChild(details);
+
+  const sources = sourceCardSection("Sources");
+  for (const src of p.sources) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "source-card-trigger";
+    btn.textContent = src.title || src.source_id;
+    btn.title = src.source_id;
+    btn.addEventListener("click", () => openSourceCard(src.source_id));
+    sources.appendChild(sourceCardRow(src.title ? src.source_id : "", btn));
+  }
+  if (!p.sources.length) {
+    const empty = document.createElement("div");
+    empty.className = "source-card-empty";
+    empty.textContent = "No sources yet.";
+    sources.appendChild(empty);
+  }
+  body.appendChild(sources);
 }

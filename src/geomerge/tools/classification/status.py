@@ -110,7 +110,7 @@ def columns_and_combos(source_id: str, target: str, config: dict) -> tuple:
     names = cached_read(path, _read_column_names)
     columns = [c for c in source_columns if c in names]
     if columns:
-        return columns, cached_read(path, _read_combos, tuple(columns))
+        return columns, cached_read(path, _read_combos, tuple(columns), persist=True)
     if is_whole_source_target(target, config):
         return columns, [{"values": {}, "count": cached_read(path, _read_row_count)}]
     return columns, []

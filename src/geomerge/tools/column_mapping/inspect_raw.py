@@ -2,12 +2,46 @@
 unique count, a few short sample values) — the evidence the column-mapping
 review UI shows alongside each raw column's suggested target."""
 
+import json
+import re
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 
 GEO_FORMATS = {"geojson", "shapefile", "gpkg"}
+
+# GeoJSON has no up-front schema, so reading its field names means scanning
+# the whole file (~4s for a 240MB one). Above this size, field names come
+# from the first features instead (_geojson_sample_names). Not for smaller
+# files: a field present only in later features (seen in this project) would
+# be missed, and their full scan is cheap enough — and cached on disk.
+GEOJSON_SAMPLE_ABOVE_BYTES = 50_000_000
+_PROPERTIES = re.compile(r'"properties"\s*:\s*')
+
+
+def _geojson_sample_names(raw_path: Path, max_bytes: int = 4_000_000, max_features: int = 200):
+    """Union of the first features' property names (from the first
+    max_bytes), or None if none could be parsed. Starts after "features" so
+    a "crs" block's own "properties" isn't counted."""
+    with open(raw_path, "rb") as f:
+        text = f.read(max_bytes).decode("utf-8", errors="ignore")
+    start = text.find('"features"')
+    if start < 0:
+        return None
+    decoder = json.JSONDecoder()
+    names, found = set(), 0
+    for m in _PROPERTIES.finditer(text, start):
+        try:
+            props, _ = decoder.raw_decode(text, m.end())
+        except ValueError:
+            break  # cut off at the end of the sample
+        if isinstance(props, dict):
+            names.update(props)
+            found += 1
+            if found >= max_features:
+                break
+    return names if found else None
 
 
 def raw_column_names(raw_path: Path, fmt: str) -> set:
@@ -24,6 +58,10 @@ def raw_column_names(raw_path: Path, fmt: str) -> set:
     the file regardless of API used. status.py's own mtime-keyed cache is
     what actually fixes repeat calls; this only helps the first one.
     """
+    if fmt == "geojson" and raw_path.stat().st_size > GEOJSON_SAMPLE_ABOVE_BYTES:
+        sampled = _geojson_sample_names(raw_path)
+        if sampled is not None:
+            return sampled
     if fmt in GEO_FORMATS:
         import pyogrio
         return set(pyogrio.read_info(str(raw_path))["fields"])

@@ -3,39 +3,46 @@
 {% block title %}validate{% endblock %}
 
 {% block extra_head %}
+  <link rel="stylesheet" href="/table-filter.css" />
   <link rel="stylesheet" href="style.css" />
 {% endblock %}
 
 {% block header_content %}
-  <label class="toggle">
-    Filter:
-    <select id="filter-mode">
-      <option value="all" selected>All</option>
-      <option value="complete">Complete</option>
-      <option value="incomplete">Incomplete</option>
-    </select>
-  </label>
+  <div class="header-filters">
+    <label class="toggle">
+      View:
+      <select id="filter-mode">
+        <option value="all" selected>All</option>
+        <option value="incomplete">Incomplete</option>
+        <option value="complete">Complete</option>
+      </select>
+    </label>
+    <input id="table-search" class="tf-search" type="search" placeholder="Search provider, source…" />
+    <span id="table-summary" class="tf-summary"></span>
+    <button id="refresh-btn" class="refresh-btn" type="button" title="Refresh status">&#8635;</button>
+  </div>
 {% endblock %}
 
 {% block content %}
   <div class="table-scroll">
     <table id="rows" class="rows-pending">
       <colgroup>
+        <col style="width: 240px" />
+        <col style="width: 52px" />
         <col />
         <col style="width: 300px" />
       </colgroup>
       <thead>
         <tr>
-          <th>Source</th>
-          <th>
-            Validation
-            <button id="refresh-btn" class="refresh-btn" title="Refresh status">&#8635;</button>
-          </th>
+          <th data-col="provider">Provider</th>
+          <th data-col="province">Prov.</th>
+          <th data-col="source">Source</th>
+          <th data-col="status">Validation</th>
         </tr>
       </thead>
       <tbody id="rows-body"></tbody>
       <tfoot>
-        <tr><td colspan="2"></td></tr>
+        <tr><td colspan="4"></td></tr>
       </tfoot>
     </table>
   </div>
@@ -46,5 +53,6 @@
 {% endblock %}
 
 {% block scripts %}
+  <script src="/table-filter.js"></script>
   <script src="app.js"></script>
 {% endblock %}

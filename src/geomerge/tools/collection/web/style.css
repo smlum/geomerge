@@ -1,11 +1,7 @@
-/* body/*{box-sizing}/header/.toggle/.geomerge-footer(base)/.hidden all now
-   live in /page-shell.css (shared with every other dashboard) — this file
-   keeps collection's own table shape (border-collapse: separate, not
-   collapse; per-th sticky, not thead — yet another table shape distinct
-   from both the review pages' and the other dashboards', see
-   page-shell.css's comment on why table mechanics aren't shared), plus a
-   couple of small overrides below where this page's pre-existing look
-   genuinely differs from the shared default. */
+/* body/*{box-sizing}/header/.toggle/.geomerge-footer(base)/.hidden live in
+   /page-shell.css. The table shape below matches the other dashboards'
+   (home/prep/pipeline/validate): fixed layout + colgroup, whole <thead>
+   sticky, .table-scroll a fixed JS-measured height. */
 
 #progress {
   color: var(--color-text-secondary);
@@ -21,86 +17,77 @@
   margin-left: auto;
 }
 
-/* A genuinely self-scrolling region (not just horizontal) sized to fill the
-   viewport below the sticky page header — per the CSS spec, overflow-x:
-   auto alone silently forces overflow-y to auto too, which would otherwise
-   make this div the sticky containing block for the table header without
-   it ever actually scrolling (the page would), breaking position: sticky
-   on the th entirely. Giving it real scroll (both axes, height-capped)
-   makes that containing block genuine instead of an accidental no-op. */
+/* Fills the viewport below the sticky page header from first paint (a
+   fixed height, not max-height), so the page's shape doesn't jump once rows
+   load. 3rem = .geomerge-footer's fixed height; 0.75rem = gap above it. */
 .table-scroll {
   overflow: auto;
-  /* A fixed height, not max-height: this needs to fill the remaining
-     viewport even before any rows have loaded (an empty tbody would
-     otherwise shrink it to just the thead's height), so the page's whole
-     "shape" is stable from first paint instead of growing once data
-     arrives. 3rem matches .geomerge-footer's fixed height above — a literal,
-     not a var, since it's a fixed constant now rather than something JS
-     measures. The extra 0.75rem is a deliberate gap between the table
-     card and the footer, not slack. */
   height: calc(100vh - var(--header-height, 100px) - 3rem - 0.75rem);
 }
 
 table {
   width: 100%;
-  min-width: 1355px;
+  /* Fixed columns ~1025px + Notes (auto): fits a 13-inch laptop (~1280px
+     viewport) without horizontal scroll. */
+  min-width: 1180px;
   table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   background: var(--color-panel-bg);
 }
 
 th, td {
   text-align: left;
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
   font-size: 0.9rem;
+  white-space: nowrap;
   overflow: hidden;
 }
 
-th {
-  background: var(--ctp-surface0);
+/* Sticky on thead itself, not per-th — same as the other dashboards
+   (translateZ: Safari's sticky repaint bug). */
+thead {
   position: sticky;
   top: 0;
   z-index: 1;
-  /* Seals the sub-pixel seam where a scrolled-past row can peek through
-     right above the sticky header (fractional scroll positions during
-     scroll don't always land on a whole pixel) — paints an extra pixel
-     above th's own top edge in its own background color. */
-  box-shadow: 0 -1px 0 var(--ctp-surface0);
-  /* Same Safari-specific sticky repaint bug as the page header above. */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
 }
 
-/* Row tints are a lighter mix than the status pills (10% vs. 20%) — a whole
-   row shouldn't compete with the pill/text sitting on top of it. */
-tr.done {
-  background: color-mix(in srgb, var(--ctp-green) 10%, var(--color-panel-bg));
-  color: var(--ctp-green);
-}
-
-tr.done a {
-  color: var(--ctp-green);
-}
-
-tr.done.not-found-row {
+th {
   background: var(--ctp-surface0);
+}
+
+/* "+N" after the Data URL box: the provider's other sources. */
+.more-sources {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 0.35rem;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ctp-mauve) 16%, var(--color-panel-bg));
+  color: var(--ctp-mauve);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Metadata status pill doubling as the button that opens the modal. */
+td button.status-btn {
+  border: none;
+  margin: 0;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
+td button.status-btn:hover {
+  filter: brightness(0.95);
+}
+
+/* Not found: dimmed, no tint (the other dashboards don't tint rows). */
+tr.not-found-row td {
   color: var(--color-text-secondary);
-}
-
-tr.done.not-found-row a {
-  color: var(--color-text-secondary);
-}
-
-tr.done.pending-metadata {
-  background: color-mix(in srgb, var(--ctp-yellow) 10%, var(--color-panel-bg));
-  color: var(--ctp-yellow);
-}
-
-tr.done.pending-metadata a {
-  color: var(--ctp-yellow);
 }
 
 .name-link {
@@ -147,22 +134,22 @@ tr.done.pending-metadata a {
   min-width: 0;
 }
 
+/* ↗ before each URL box; dimmed when the box is empty. */
 .open-link {
   flex-shrink: 0;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-panel-bg);
-  color: var(--color-text);
+  color: var(--ctp-mauve);
   text-decoration: none;
-  white-space: nowrap;
+  font-size: 0.85rem;
 }
 
-.open-link:hover {
-  background: var(--ctp-surface0);
+.open-link.disabled {
+  color: var(--color-text-secondary);
+  opacity: 0.4;
+  pointer-events: none;
 }
 
+/* Modal fields keep a visible border; table URL boxes read as text until
+   hovered or focused. */
 input[type="text"] {
   width: 100%;
   padding: 0.3rem 0.4rem;
@@ -173,53 +160,121 @@ input[type="text"] {
   color: var(--color-text);
 }
 
-.flag-cell {
-  text-align: center;
-}
-
-.flag-cell input[type="checkbox"] {
-  cursor: pointer;
-}
-
-/* !important because this needs to win regardless of a row's other status
-   coloring (tr.done.pending-metadata etc. have higher specificity from
-   stacking multiple classes) — flagged is "needs my attention" and should
-   never be silently masked by whatever other tint the row already has. */
-tr.flagged-row {
-  background: color-mix(in srgb, var(--ctp-yellow) 15%, var(--color-panel-bg)) !important;
-}
-
-/* The row a ?provider= deep link landed on (see app.js's openFromQueryParam). */
-tr.linked-row td {
-  box-shadow: inset 0 2px 0 var(--ctp-mauve), inset 0 -2px 0 var(--ctp-mauve);
-}
-
-textarea.notes-input {
-  display: block;
-  width: 100%;
-  min-width: 160px;
-  resize: none;
-  overflow: hidden;
-  white-space: nowrap;
-  font: inherit;
-  line-height: 1.3;
-  color: var(--color-text);
+td input[type="text"] {
+  padding: 0.15rem 0.3rem;
   border-color: transparent;
   background: transparent;
+  color: inherit;
 }
 
-textarea.notes-input:hover,
-textarea.notes-input:focus {
+td input[type="text"]:hover {
   border-color: var(--color-border);
+}
+
+td input[type="text"]:focus {
+  outline: none;
+  border-color: var(--ctp-mauve);
   background: var(--color-input-bg);
   color: var(--color-text);
 }
 
-/* Only while actually editing — wraps to show the full note, growing the
-   row to fit; collapses back to a single line on blur. */
-textarea.notes-input.expanded {
+/* Table buttons (Found / Not found / metadata) — compact, like the other
+   dashboards' pills. */
+td button {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+td button.notes-trigger {
+  padding: 0;
+}
+
+/* Notes column (notesCell): flag pills + status, or "note"; click opens
+   the provider modal. "+ note" only shows on row hover. */
+.notes-trigger {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  align-items: center;
+  gap: 0.2rem;
+  width: 100%;
+  min-height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notes-trigger:hover {
+  background: none;
+}
+
+.notes-trigger.notes-empty {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  opacity: 0;
+}
+
+tr:hover .notes-trigger.notes-empty,
+.notes-trigger.notes-empty:focus-visible {
+  opacity: 1;
+}
+
+/* Provider modal's note + flag, below the fields. */
+.provider-notes {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-border);
+}
+
+textarea.provider-notes-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+/* Footer "editing: <path>" — opens /file-preview.js's modal. */
+.footer-file-link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.footer-file-link:hover {
+  background: none;
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.code-block {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
   white-space: pre-wrap;
-  overflow-wrap: break-word;
+  word-break: break-word;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.code-block.hljs {
+  background: var(--color-panel-bg);
+  color: var(--color-text);
 }
 
 .actions-cell {
@@ -269,9 +324,9 @@ button.not-found:hover {
 }
 
 button.not-found.confirmed {
-  background: var(--color-text-secondary);
-  color: var(--color-nav-bg);
-  border-color: var(--color-text-secondary);
+  background: var(--ctp-surface1);
+  color: var(--color-text);
+  border-color: var(--ctp-surface2);
 }
 
 button.not-found.confirmed:hover {
@@ -289,29 +344,14 @@ button.not-found.confirmed:hover {
   display: none;
 }
 
-/* page-shell.css's shared .status sets the pill shape (display/padding/
-   border-radius/font-weight, at 0.78rem) already — this page's own status
-   pills sit inline in a table cell, so the only thing genuinely different
-   here is the trailing margin; -missing/-partial (collection.metadata's own
-   status vocabulary, distinct from the not_started/needs_review/... one
-   used everywhere else) don't exist in the shared file at all. */
+.actions-cell .error:empty {
+  display: none;
+}
+
+/* Pill shape and colours (incl. -missing/-partial) come from page-shell.css,
+   same as Home's — only the trailing margin is this page's own. */
 .status {
   margin-right: 0.4rem;
-}
-
-/* Gray, not the shared page-shell.css's red — collection.metadata's own
-   "missing" means "haven't looked yet", a neutral checklist state, not
-   home dashboard's "something's actively wrong" red for the same class
-   name in a different context. .status-partial/-complete's colors happen
-   to already match the shared file's, so only this one needs overriding. */
-.status-missing {
-  background: var(--ctp-surface0);
-  color: var(--color-text-secondary);
-}
-
-button.metadata-btn {
-  border-color: var(--color-border);
-  color: var(--color-text);
 }
 
 .source-block {

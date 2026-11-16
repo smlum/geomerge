@@ -34,9 +34,9 @@ from geomerge.helpers.config import load_config
 # which an explicit allowlist here used to silently drop.
 INFO_COLUMNS = ["name", "portal_url", "geography_level", "province"]
 # Guaranteed present even in a brand-new or older checklist.
-WORK_COLUMNS = ["prior_url", "source_url", "checked", "checked_date", "source_ids", "notes", "flagged"]
+WORK_COLUMNS = ["prior_url", "source_url", "checked", "outcome", "checked_date", "source_ids", "notes", "flagged"]
 COLUMN_ORDER = [
-    "checked", "provider_id", "portal_url", "prior_url", "source_url",
+    "checked", "outcome", "provider_id", "portal_url", "prior_url", "source_url",
     "name", "geography_level", "province", "checked_date", "source_ids", "notes", "flagged",
     "flag_reasons", "flag_status", "flag_status_date",
 ]

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from geomerge.helpers.file_cache import cached_yaml
+from geomerge.helpers.file_cache import cached_read, cached_yaml
 from geomerge.helpers.status import COMPLETE, NEEDS_REVIEW, NOT_STARTED
 from geomerge.tools.column_mapping.inspect_raw import raw_column_names
 
@@ -14,27 +14,11 @@ def load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text()) or {} if path.exists() else {}
 
 
-# source_status() below is called for every source on every dashboard load
-# (home, prep) and every "save & next" click (column_mapping's own
-# /api/sources) — reading a raw file's column names fresh every single time
-# is the actual cost (a full geopandas parse for geo formats, worst case
-# ~11s for one large real file in this project), even though the same raw
-# file's columns essentially never change between those calls. Keyed by
-# mtime rather than just path so a re-downloaded/updated raw file is picked
-# up automatically instead of needing a server restart — process-lifetime
-# only (no persistence across restarts), which is fine for a local dev tool.
-_raw_column_names_cache: dict[str, tuple[float, set]] = {}
-
-
 def cached_raw_column_names(raw_path: Path, fmt: str) -> set:
-    key = str(raw_path)
-    mtime = raw_path.stat().st_mtime
-    cached = _raw_column_names_cache.get(key)
-    if cached and cached[0] == mtime:
-        return cached[1]
-    names = raw_column_names(raw_path, fmt)
-    _raw_column_names_cache[key] = (mtime, names)
-    return names
+    """raw_column_names(), cached on disk too (helpers/file_cache.py) — it's
+    the costliest part of a cold dashboard load (a scan of every raw file),
+    and a raw file's columns essentially never change."""
+    return cached_read(raw_path, raw_column_names, fmt, persist=True)
 
 
 def source_status(source_id: str, config: dict) -> dict:

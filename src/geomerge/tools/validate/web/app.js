@@ -21,16 +21,9 @@ function isRowComplete(s) {
   return s.validation === "complete";
 }
 
-function nameCell(sourceId) {
-  const nameTd = document.createElement("td");
-  nameTd.className = "name";
-  nameTd.textContent = sourceId;
-  return nameTd;
-}
-
 function renderRow(s) {
   const tr = document.createElement("tr");
-  tr.appendChild(nameCell(s.source_id));
+  tr.append(providerCell(s.provider), provinceCell(s.provider.province), sourceCell(s.source_id, s.provider.id, s.title));
 
   tr.appendChild(plainCell(s.validation));
 
@@ -64,6 +57,7 @@ function render() {
   } else if (filterMode === "incomplete") {
     visible = sources.filter((s) => !isRowComplete(s));
   }
+  visible = tableFilter.apply(visible);
 
   const body = document.getElementById("rows-body");
   body.innerHTML = "";
@@ -79,7 +73,7 @@ async function load() {
   sources = null;
   await loadStatusTable({
     footerId: "progress",
-    nameCell,
+    nameCell: placeholderNameCells,
     statusColumns: 1,
     onLoaded: (data) => {
       sources = data;
@@ -90,12 +84,23 @@ async function load() {
 
 document.getElementById("refresh-btn").addEventListener("click", load);
 
-const filterSelect = document.getElementById("filter-mode");
-const savedFilter = localStorage.getItem("validate-filter-mode");
-if (savedFilter) filterSelect.value = savedFilter;
-filterSelect.addEventListener("change", () => {
-  localStorage.setItem("validate-filter-mode", filterSelect.value);
-  if (sources) render();
+// --- Filters -------------------------------------------------------------------
+// View dropdown + column filters/sort/search, kept in the URL (/table-filter.js).
+const tableFilter = createTableFilter({
+  columns: {
+    provider: { label: "Provider", filter: false, values: () => [], sort: (s) => (s.provider.name || "").toLowerCase() },
+    province: { label: "Prov.", values: (s) => [s.provider.province || "—"], sort: (s) => s.provider.province || "" },
+    source: { label: "Source", filter: false, values: () => [], sort: (s) => (s.title || sourceLabel(s.source_id, s.provider.id)).toLowerCase() },
+    status: { label: "Validation", values: (s) => [s.validation], format: (v) => v.replace(/_/g, " "), sort: (s) => s.validation },
+  },
+  search: (s) => [s.source_id, s.title, s.provider.name, s.provider.id, s.provider.province].join(" "),
+  onChange: () => sources && render(),
 });
+for (const th of document.querySelectorAll("#rows th[data-col]")) tableFilter.attachHeader(th, th.dataset.col);
+tableFilter.attachSearch(document.getElementById("table-search"));
+tableFilter.attachSummary(document.getElementById("table-summary"));
+
+const filterSelect = document.getElementById("filter-mode");
+bindViewSelect(filterSelect, () => sources && render());
 
 load();

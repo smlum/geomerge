@@ -91,3 +91,30 @@ def flagged_providers(config: dict) -> list:
     if not checklist_path.exists():
         return []
     return cached_read(checklist_path, _flagged_rows)
+
+
+def source_provider(source_id: str, config: dict) -> dict:
+    """{"id", "name", "province"} of the provider a source belongs to (its
+    metadata.yaml provider_id -> checklist.csv) — every dashboard's
+    Provider column."""
+    metadata = cached_yaml(config["repo_root"] / config["sources_dir"] / source_id / "metadata.yaml") or {}
+    provider_id = metadata.get("provider_id") or ""
+    row = provider_row(provider_id, config)
+    return {"id": provider_id, "name": row.get("name") or provider_id, "province": row.get("province", "")}
+
+
+def source_has_contact(source_id: str, config: dict) -> bool:
+    """Whether anyone's recorded who to ask — the source's own contact, or
+    its provider's in checklist.csv. Turns a "contact" status into "find
+    contact" in the UI (/flag-editor.js)."""
+    metadata = cached_yaml(config["repo_root"] / config["sources_dir"] / source_id / "metadata.yaml") or {}
+    if (metadata.get("contact") or "").strip():
+        return True
+    return bool((provider_row(metadata.get("provider_id"), config).get("contact") or "").strip())
+
+
+def source_title(source_id: str, config: dict) -> str:
+    """The dataset's published title (metadata.yaml dataset_title), or "" —
+    what dashboards show in the Source column, falling back to the label."""
+    metadata = cached_yaml(config["repo_root"] / config["sources_dir"] / source_id / "metadata.yaml") or {}
+    return (metadata.get("dataset_title") or "").strip()

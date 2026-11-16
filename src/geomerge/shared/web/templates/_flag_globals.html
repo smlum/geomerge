@@ -1,0 +1,8 @@
+{# FLAG_REASONS / FLAG_STATUSES for /flag-editor.js — the page's render_template
+   passes flag_reasons=flag_reasons(config), flag_statuses=list(FLAG_STATUSES). #}
+<script>
+  // As [code, info] pairs: tojson sorts object keys, losing config order.
+  const FLAG_REASONS = Object.fromEntries({{ flag_reasons.items() | list | tojson }});
+  const FLAG_STATUSES = {{ flag_statuses | tojson }};
+</script>
+<script src="/flag-editor.js"></script>

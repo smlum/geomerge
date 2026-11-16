@@ -46,19 +46,10 @@ function yamlPreviewCell(status, sourceId, kind, boundary) {
   return td;
 }
 
-// No tool exists yet for this stage — a badge, not a link, so there's
-// nothing to click through to.
-function plainCell(status, boundary) {
-  const td = document.createElement("td");
-  if (boundary) td.classList.add("group-boundary");
-  td.appendChild(statusBadge(status));
-  return td;
-}
-
 // Raw has no editor of its own, but "complete" means a file's actually sat
 // down on disk somewhere — worth a click to confirm exactly where without
 // digging through data/raw/ by hand. "missing" stays a plain, inert badge
-// (see plainCell) since there's nothing to show.
+// since there's nothing to show.
 function rawInfoCell(status, sourceId, rawFilename, boundary) {
   const td = document.createElement("td");
   if (boundary) td.classList.add("group-boundary");
@@ -120,8 +111,11 @@ async function copyCommand(badge, command) {
 
 // Cross-blueprint fetch (each tool owns its own YAML file) — absolute path,
 // since this page is served from "/", not from that tool's own prefix.
-async function openYamlModal(kind, sourceId) {
+// stacked: opened from the notes popout — sits above it. Edit always opens
+// a new tab, so you can work through several without losing this page.
+async function openYamlModal(kind, sourceId, { stacked = false } = {}) {
   const preview = YAML_PREVIEWS[kind];
+  document.getElementById("yaml-modal").classList.toggle("modal-stacked", stacked);
   document.getElementById("yaml-modal-title").textContent = sourceId;
   document.getElementById("yaml-modal-path").textContent = "";
   const editBtn = document.getElementById("yaml-modal-edit");
@@ -167,19 +161,6 @@ function isRowComplete(s) {
   return statuses.every((st) => st === "complete" || st === "not_applicable");
 }
 
-function nameCell(sourceId) {
-  const nameTd = document.createElement("td");
-  nameTd.className = "name";
-  const nameBtn = document.createElement("button");
-  nameBtn.type = "button";
-  nameBtn.className = "source-card-trigger";
-  nameBtn.textContent = sourceId;
-  nameBtn.title = sourceId;
-  nameBtn.addEventListener("click", () => openSourceCard(sourceId));
-  nameTd.appendChild(nameBtn);
-  return nameTd;
-}
-
 // --- Notes column + popout ---------------------------------------------------
 // One note, flag and exclude switch per source (metadata.yaml — see
 // helpers/source_notes.py), shared by every stage. The cell shows pills only;
@@ -187,55 +168,9 @@ function nameCell(sourceId) {
 // edited. Provider-level follow-ups (flagged checklist.csv rows, usually with
 // no source yet) get the same popout, minus the exclude switch.
 
-function notesPill(text, kind) {
-  const span = document.createElement("span");
-  span.className = `notes-pill notes-pill-${kind}`;
-  span.textContent = text;
-  return span;
-}
-
-// A flag's reasons, each its own colour (flag_reasons in the project's
-// geomerge.config.yaml), or a plain "flagged" until it has any. Unknown
-// codes (since dropped from config) still show, as their raw code. What to
-// do about it is the separate follow-up status — its own column.
-const FLAG_STATUS_LABELS = { contact: "Contact", waiting: "Waiting", review: "Review" };
-
-function reasonInfo(code) {
-  return FLAG_REASONS[code] || { label: code.replace(/_/g, " "), color: "overlay1" };
-}
-
-function reasonPill(code) {
-  const info = reasonInfo(code);
-  const pill = notesPill(info.label, "reason");
-  pill.style.setProperty("--pill-accent", `var(--ctp-${info.color})`);
-  return pill;
-}
-
-function flagPills(markers, pen = "") {
-  const reasons = markers.flag_reasons || [];
-  const pills = reasons.length ? reasons.map(reasonPill) : [notesPill("flagged", "flagged")];
-  if (pen) pills[0].textContent += pen;
-  return pills;
-}
-
-// "contact" with nobody on file yet shows as "find contact" — display only,
-// never stored; it turns back into Contact once a contact's saved.
-function needsContactFound(markers) {
-  return markers.flag_status === "contact" && !markers.has_contact;
-}
-
-function statusPill(markers) {
-  const status = markers.flag_status;
-  const findContact = needsContactFound(markers);
-  const label = findContact ? "Find contact" : FLAG_STATUS_LABELS[status] || status;
-  const pill = notesPill(label, findContact ? "status-find-contact" : `status-${status}`);
-  if (markers.flag_status_date) pill.title = `${FLAG_STATUS_LABELS[status] || status} since ${markers.flag_status_date}`;
-  if (findContact) pill.title = `No contact recorded yet${pill.title ? ` · ${pill.title}` : ""}`;
-  return pill;
-}
-
-// The Follow-up column: a flag's status, or nothing. Opens the same popout.
-function followUpCell(markers, onOpen) {
+// The Status column: a flag's status, or nothing. Clicking it opens a small
+// menu of FLAG_STATUSES; picking one saves straight away (onPick).
+function followUpCell(markers, onPick) {
   const td = document.createElement("td");
   td.className = "followup-cell";
   if (!markers.flagged) return td;
@@ -243,9 +178,24 @@ function followUpCell(markers, onOpen) {
   btn.type = "button";
   btn.className = "notes-trigger";
   btn.appendChild(statusPill(markers));
-  btn.addEventListener("click", onOpen);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openStatusMenu(btn, markers.flag_status, onPick);
+  });
   td.appendChild(btn);
   return td;
+}
+
+function openStatusMenu(anchor, current, onPick) {
+  openPillMenu(anchor, statusOptions(current), async (st) => {
+    if (st === current) return;
+    try {
+      await onPick(st);
+    } catch (err) {
+      alert(`Failed to save status: ${err.message}`);
+    }
+    render();
+  });
 }
 
 function notesCell(markers, onOpen) {
@@ -254,13 +204,14 @@ function notesCell(markers, onOpen) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "notes-trigger";
-  const pen = markers.notes ? " ✎" : "";
-  if (markers.flagged) btn.append(...flagPills(markers, pen));
-  if (markers.excluded) btn.appendChild(notesPill(`excluded${markers.flagged ? "" : pen}`, "excluded"));
-  if (markers.notes && !markers.flagged && !markers.excluded) btn.appendChild(notesPill("note", "note"));
+  const pills = [];
+  if (markers.flagged) pills.push(...flagPills(markers));
+  if (markers.excluded) pills.push(notesPill("excluded", "excluded"));
+  if (markers.notes && !markers.flagged && !markers.excluded) pills.push(notesPill("note", "note"));
   // A flagged source's reasons already say what's wrong; its class notes
   // are still in the popout.
-  if (markers.class_notes && !markers.flagged) btn.appendChild(notesPill(`${markers.class_notes} class`, "class"));
+  if (markers.class_notes && !markers.flagged) pills.push(notesPill(`${markers.class_notes} class`, "class"));
+  btn.append(...compactPills(pills));
   if (!btn.childNodes.length) {
     btn.classList.add("notes-empty");
     btn.textContent = "+ note";
@@ -275,7 +226,7 @@ function notesCell(markers, onOpen) {
 // what needs doing, where the source stands, its link, whether there's a
 // contact, a link to the full metadata. Edit swaps in the fields.
 let notesTarget = null; // {kind: "source", source} | {kind: "provider", provider}
-let notesView = null; // what the summary shows: {label, note, flagged, flag_reasons, flag_status, flag_status_date, excluded, status, links, contact, providerContact, facts, metaHref, metaText}
+let notesView = null; // what the summary shows: {label, note, flagged, flag_reasons, flag_status, flag_status_date, excluded, links, contact, providerContact, updated, metaView, metaHref, metaLabel}
 let notesSaved = null; // the edit fields as last loaded/saved, for the dirty check
 
 function externalLink(href, text) {
@@ -296,130 +247,66 @@ function contactNode(contact) {
   return document.createTextNode(contact);
 }
 
-// Where a source stands, in one line: excluded, the first stage still to
-// do, or done. Read from its row's statuses (source_row in server.py).
-function pipelineSummary(s) {
-  if (s.markers.excluded) return "Excluded — the pipeline skips it";
-  const stages = [
-    ["Metadata", s.collection.metadata],
-    ["Raw data", s.collection.raw],
-    ["Map", s.tools.column_mapping],
-    ["Preprocess", s.tools.preprocessing],
-    ["Classify", s.tools.classification],
-    ["Process", s.pipeline.processing],
-  ];
-  const next = stages.find(([, status]) => status !== "complete" && status !== "not_applicable");
-  if (!next) return "Processed — goes into the merge";
-  return `${next[0]}: ${next[1].replace(/_/g, " ")} — not in the merge yet`;
-}
-
-function sourceFacts(d) {
-  const facts = [];
-  if (d.source_updated_date) facts.push(`Updated ${d.source_updated_date}`);
-  if (d.license_name || d.license_url) {
-    const openness = d.open_license === true ? "open" : d.open_license === false ? "not open" : "openness unset";
-    const label = `${d.license_name || "Licence"} (${openness})`;
-    facts.push(d.license_url ? externalLink(d.license_url, label) : label);
-  } else {
-    facts.push("No licence recorded");
-  }
-  return facts;
-}
-
 function renderNotesSummary() {
   const v = notesView;
-  const badges = document.getElementById("notes-sum-badges");
-  badges.innerHTML = "";
-  if (v.flagged) badges.append(...flagPills(v), statusPill(v));
-  if (v.excluded) badges.appendChild(notesPill("excluded", "excluded"));
-  document.getElementById("notes-sum-status").textContent = v.status || "";
-
   const noteInput = document.getElementById("notes-modal-text");
   noteInput.value = v.note || "";
-  noteInput.placeholder = v.flagged ? "Flagged — add a note saying what needs doing…" : "Add a note…";
+  noteInput.placeholder = "Add a note…";
   growNoteInput();
 
-  // The dataset page itself, as its own URL (shortened), so it's one click.
-  const sourceEl = document.getElementById("notes-sum-source");
-  sourceEl.innerHTML = "";
-  if (v.sourceUrl) {
-    const shown = v.sourceUrl.replace(/^https?:\/\/(www\.)?/, "");
-    const a = externalLink(v.sourceUrl, `${shown.length > 60 ? shown.slice(0, 57) + "…" : shown} ↗`);
-    a.title = v.sourceUrl;
-    sourceEl.appendChild(a);
-  } else {
-    const missing = document.createElement("span");
-    missing.className = "notes-missing";
-    missing.textContent = "No page recorded";
-    sourceEl.appendChild(missing);
-  }
-
+  // External links (data page, portal), then the internal metadata editor
+  // on its own row. The full URL is on hover.
   const linksEl = document.getElementById("notes-sum-links");
   linksEl.innerHTML = "";
-  for (const [href, text] of [...v.links, [v.metaHref, v.metaText]]) {
+  for (const [href, text] of v.links) {
     if (!href) continue;
     if (linksEl.childNodes.length) linksEl.append(" · ");
-    linksEl.appendChild(externalLink(href, text));
+    const a = externalLink(href, `${text} ↗`);
+    a.title = href;
+    linksEl.appendChild(a);
   }
-  const showLinks = linksEl.childNodes.length > 0;
-  document.getElementById("notes-sum-links-label").classList.toggle("hidden", !showLinks);
-  linksEl.classList.toggle("hidden", !showLinks);
-
-  const showFacts = v.facts.length > 0;
-  document.getElementById("notes-sum-facts-label").classList.toggle("hidden", !showFacts);
-  const factsEl = document.getElementById("notes-sum-facts");
-  factsEl.classList.toggle("hidden", !showFacts);
-  factsEl.innerHTML = "";
-  v.facts.forEach((fact, i) => {
-    if (i) factsEl.append(" · ");
-    factsEl.append(fact);
-  });
-}
-
-// The reason chips and status picker under the Flagged checkbox. Chips are
-// toggle buttons (aria-pressed), drawn once from FLAG_REASONS plus any code
-// the current flag has that config no longer lists.
-function chosenReasons() {
-  return [...document.querySelectorAll("#notes-flag-reasons .reason-chip[aria-pressed='true']")].map(
-    (b) => b.dataset.code,
-  );
-}
-
-function renderReasonChips(selected) {
-  const wrap = document.getElementById("notes-flag-reasons");
-  wrap.innerHTML = "";
-  const codes = [...Object.keys(FLAG_REASONS), ...selected.filter((c) => !(c in FLAG_REASONS))];
-  for (const code of codes) {
-    const info = reasonInfo(code);
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "reason-chip";
-    b.style.setProperty("--pill-accent", `var(--ctp-${info.color})`);
-    b.dataset.code = code;
-    b.textContent = info.label;
-    b.setAttribute("aria-pressed", selected.includes(code) ? "true" : "false");
-    b.addEventListener("click", () => {
-      b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
-      updateNotesSaveButton();
-    });
-    wrap.appendChild(b);
+  if (!linksEl.childNodes.length) {
+    const missing = document.createElement("span");
+    missing.className = "notes-missing";
+    missing.textContent = "None recorded";
+    linksEl.appendChild(missing);
   }
+
+  const metaEl = document.getElementById("notes-sum-meta");
+  document.getElementById("notes-sum-meta-label").textContent = v.metaLabel;
+  metaEl.innerHTML = "";
+  // A source's metadata.yaml opens in the read-only YAML modal (its Edit
+  // goes to Collect in a new tab); a provider's checklist row has no file
+  // of its own to show, so it links straight to Collect.
+  if (v.metaView) {
+    const view = document.createElement("button");
+    view.type = "button";
+    view.className = "notes-link-btn";
+    view.textContent = "View";
+    view.addEventListener("click", v.metaView);
+    metaEl.appendChild(view);
+  } else {
+    const edit = externalLink(v.metaHref, "Edit ↗");
+    metaEl.appendChild(edit);
+  }
+
+  const showUpdated = !!v.updated;
+  document.getElementById("notes-sum-updated-label").classList.toggle("hidden", !showUpdated);
+  const updatedEl = document.getElementById("notes-sum-updated");
+  updatedEl.classList.toggle("hidden", !showUpdated);
+  updatedEl.textContent = v.updated || "";
 }
 
-function updateFlagDetailVisibility() {
-  const flagged = document.getElementById("notes-modal-flagged").checked;
-  document.getElementById("notes-flag-detail").classList.toggle("hidden", !flagged);
-}
-
-const statusSelect = document.getElementById("notes-flag-status");
-for (const st of FLAG_STATUSES) statusSelect.add(new Option(FLAG_STATUS_LABELS[st] || st, st));
+// The popout's flag editor (top of the panel) — /flag-editor.js.
+const flagEditor = createFlagEditor(document.getElementById("notes-flag-editor"), {
+  onChange: () => updateNotesSaveButton(),
+  hasContact: () => !!(document.getElementById("notes-modal-contact").value.trim() || notesView?.providerContact),
+});
 
 function notesFormState() {
   return JSON.stringify([
     document.getElementById("notes-modal-text").value.trim(),
-    document.getElementById("notes-modal-flagged").checked,
-    chosenReasons(),
-    document.getElementById("notes-flag-status").value,
+    flagEditor.get(),
     document.getElementById("notes-modal-excluded").checked,
     document.getElementById("notes-modal-contact").value.trim(),
   ]);
@@ -443,11 +330,6 @@ function updateNotesSaveButton() {
 // renderNotesSummary), then snapshot — so Cancel/reopening starts clean.
 function fillNotesForm() {
   const v = notesView;
-  document.getElementById("notes-modal-flagged").checked = !!v.flagged;
-  renderReasonChips(v.flag_reasons || []);
-  document.getElementById("notes-flag-status").value = v.flag_status || FLAG_STATUSES[FLAG_STATUSES.length - 1];
-  document.getElementById("notes-flag-status-date").textContent = v.flag_status_date ? `since ${v.flag_status_date}` : "";
-  updateFlagDetailVisibility();
   document.getElementById("notes-modal-excluded").checked = !!v.excluded;
   document.getElementById("notes-modal-contact").value = v.contact || "";
   const hint = document.getElementById("notes-modal-contact-hint");
@@ -467,6 +349,7 @@ function fillNotesForm() {
     hint.append(" ");
     hint.appendChild(use);
   }
+  flagEditor.set(v);
   notesSaved = notesFormState();
 }
 
@@ -513,14 +396,12 @@ function sourceView(s, details) {
     flag_status_date: s.markers.flag_status_date || "",
     has_contact: details ? !!(d.contact || d.provider_contact) : s.markers.has_contact,
     excluded: s.markers.excluded,
-    status: pipelineSummary(s),
-    sourceUrl: d.dataset_page_url || "",
-    links: [[d.portal_url, "Portal ↗"]],
-    metaHref: `/collection/?id=${encodeURIComponent(id)}`,
-    metaText: "Metadata ↗",
+    links: [[d.dataset_page_url, "Data"], [d.portal_url, "Portal"]],
+    metaView: () => openYamlModal("metadata", id, { stacked: true }),
+    metaLabel: "Metadata",
     contact: d.contact || "",
     providerContact: d.provider_contact || "",
-    facts: details ? sourceFacts(d) : [],
+    updated: d.source_updated_date || "",
   };
 }
 
@@ -533,16 +414,12 @@ function providerView(p) {
     flag_status_date: p.flag_status_date || "",
     has_contact: !!(p.contact || "").trim(),
     excluded: false,
-    status: p.source_ids.length
-      ? `Provider follow-up · ${p.source_ids.length} source${p.source_ids.length === 1 ? "" : "s"}`
-      : "Provider follow-up · no source yet",
-    sourceUrl: p.source_url || "",
-    links: [[p.portal_url, "Portal ↗"]],
+    links: [[p.source_url, "Data"], [p.portal_url, "Portal"]],
     metaHref: `/collection/?provider=${encodeURIComponent(p.provider_id)}`,
-    metaText: "Checklist row ↗",
+    metaLabel: "Checklist",
     contact: p.contact || "",
     providerContact: "",
-    facts: [],
+    updated: "",
   };
 }
 
@@ -631,10 +508,8 @@ async function postJson(url, body) {
 async function saveNotesModal() {
   if (!notesTarget || !isNotesDirty()) return;
   const notes = document.getElementById("notes-modal-text").value.trim();
-  const flagged = document.getElementById("notes-modal-flagged").checked;
-  const flag = flagged
-    ? { flagged, flag_reasons: chosenReasons(), flag_status: document.getElementById("notes-flag-status").value }
-    : { flagged };
+  const flag = flagEditor.get();
+  const flagged = flag.flagged;
   const excluded = document.getElementById("notes-modal-excluded").checked;
   const contact = document.getElementById("notes-modal-contact").value.trim();
   setNotesStatus("Saving…");
@@ -648,7 +523,7 @@ async function saveNotesModal() {
       });
       const hasContact = !!(contact || notesView.providerContact);
       s.markers = { ...s.markers, ...flagFields(saved), notes: saved.notes, excluded: saved.excluded, has_contact: hasContact };
-      notesView = { ...notesView, ...flagFields(saved), note: saved.notes, excluded: saved.excluded, contact, has_contact: hasContact, status: pipelineSummary(s) };
+      notesView = { ...notesView, ...flagFields(saved), note: saved.notes, excluded: saved.excluded, contact, has_contact: hasContact };
     } else {
       const p = notesTarget.provider;
       await postJson("/collection/api/note", { row_index: p.row_index, notes });
@@ -685,10 +560,9 @@ document.getElementById("notes-modal-text").addEventListener("input", () => {
   growNoteInput();
   updateNotesSaveButton();
 });
-for (const id of ["notes-modal-contact", "notes-modal-flagged", "notes-modal-excluded", "notes-flag-status"]) {
+for (const id of ["notes-modal-contact", "notes-modal-excluded"]) {
   document.getElementById(id).addEventListener("input", updateNotesSaveButton);
 }
-document.getElementById("notes-modal-flagged").addEventListener("input", updateFlagDetailVisibility);
 document.getElementById("notes-modal-save").addEventListener("click", saveNotesModal);
 document.getElementById("notes-modal-close").addEventListener("click", closeNotesModal);
 // A click outside the panel closes it only when nothing's unsaved, so a
@@ -707,50 +581,42 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") saveNotesModal();
 });
 
-// A flagged checklist.csv row, shown only under the Flagged filter — most
-// have no source yet, so there are no stage statuses to show.
+// A flagged checklist.csv row, shown only under the Flagged view — a
+// provider-level follow-up, usually with no source yet: Provider filled,
+// Source and the stage columns blank.
 function renderProviderRow(p) {
   const tr = document.createElement("tr");
   tr.className = "provider-row";
+  tr.append(providerCell({ id: p.provider_id, name: p.name, province: p.province }), provinceCell(p.province));
 
-  const nameTd = document.createElement("td");
-  nameTd.className = "name";
-  const name = document.createElement("div");
-  name.className = "provider-name";
-  name.textContent = p.name || p.provider_id;
-  const sub = document.createElement("div");
-  sub.className = "meta";
-  sub.textContent = p.source_ids.length
-    ? `provider · ${p.source_ids.length} source${p.source_ids.length === 1 ? "" : "s"}`
-    : "provider · no source yet";
-  nameTd.append(name, sub);
-  tr.appendChild(nameTd);
+  const src = document.createElement("td");
+  src.className = "meta";
+  src.textContent = p.source_ids.length ? `${p.source_ids.length} source${p.source_ids.length === 1 ? "" : "s"}` : "—";
+  tr.appendChild(src);
 
   const rest = document.createElement("td");
-  rest.colSpan = 7;
-  rest.className = "group-boundary provider-rest";
-  const text = document.createElement("span");
-  text.className = "meta";
-  text.textContent = p.notes || "Provider-level follow-up";
-  const link = document.createElement("a");
-  link.href = `/collection/?provider=${encodeURIComponent(p.provider_id)}`;
-  link.target = "_blank";
-  link.rel = "noopener";
-  link.className = "notes-link";
-  link.textContent = "Collect ↗";
-  rest.append(link, text);
+  rest.colSpan = 6;
+  rest.className = "group-boundary";
   tr.appendChild(rest);
 
-  const markers = { ...flagFields(p), notes: p.notes, flagged: true, has_contact: p.has_contact };
+  const markers = providerMarkers(p);
   const open = () => openNotesModal({ kind: "provider", provider: p });
   tr.appendChild(notesCell(markers, open));
-  tr.appendChild(followUpCell(markers, open));
+  tr.appendChild(
+    followUpCell(markers, async (flag_status) => {
+      Object.assign(p, flagFields(await postJson("/collection/api/flag", { row_index: p.row_index, flag_status })));
+    }),
+  );
   return tr;
+}
+
+function providerMarkers(p) {
+  return { ...flagFields(p), notes: p.notes, flagged: true, has_contact: p.has_contact, excluded: false };
 }
 
 function renderRow(s) {
   const tr = document.createElement("tr");
-  tr.appendChild(nameCell(s.source_id));
+  tr.append(providerCell(s.provider), provinceCell(s.provider.province), sourceCell(s.source_id, s.provider.id, s.title));
 
   // collection/ — metadata opens a read-only preview modal (see
   // yamlPreviewCell); raw is just a badge for whether the file showed up on
@@ -768,11 +634,15 @@ function renderRow(s) {
 
   // pipeline/ — mechanical, no review UI to link into yet.
   tr.appendChild(pipelineCell(s.pipeline.processing, s.source_id, "processing", true));
-  tr.appendChild(plainCell(s.pipeline.validation));
 
   const open = () => openNotesModal({ kind: "source", source: s });
   tr.appendChild(notesCell(s.markers, open));
-  tr.appendChild(followUpCell(s.markers, open));
+  tr.appendChild(
+    followUpCell(s.markers, async (flag_status) => {
+      const saved = await postJson(`/api/source_notes/${encodeURIComponent(s.source_id)}`, { flag_status });
+      s.markers = { ...s.markers, ...flagFields(saved) };
+    }),
+  );
 
   return tr;
 }
@@ -810,20 +680,18 @@ function render() {
   } else if (filterMode === "incomplete") {
     visible = sources.filter((s) => !isRowComplete(s));
   } else if (filterMode === "flagged") {
-    const match = flagMatcher(document.getElementById("flag-filter").value);
-    visible = sources.filter((s) => s.markers.flagged && match(s.markers));
-    providerRows = flaggedProviders.filter(match);
+    visible = sources.filter((s) => s.markers.flagged);
+    providerRows = flaggedProviders;
   } else if (filterMode === "excluded") {
     visible = sources.filter((s) => s.markers.excluded);
   }
 
+  // Sources and provider rows filter/sort together (/table-filter.js).
+  const items = tableFilter.apply([...visible, ...providerRows.map((p) => ({ ...p, kind: "provider", _p: p }))]);
   const body = document.getElementById("rows-body");
   body.innerHTML = "";
-  for (const s of visible) {
-    body.appendChild(renderRow(s));
-  }
-  for (const p of providerRows) {
-    body.appendChild(renderProviderRow(p));
+  for (const item of items) {
+    body.appendChild(item.kind === "provider" ? renderProviderRow(item._p) : renderRow(item));
   }
 
   // About this table's own rows (every stage, not just one), not the
@@ -841,7 +709,7 @@ function render() {
   }).join(" / ");
   document.getElementById("summary").textContent =
     `${completeCount} / ${sources.length} sources complete · ${flaggedCount} flagged · ` +
-    `${flaggedProviders.length} flagged providers · follow-ups: ${byStatus} · ${excludedCount} excluded`;
+    `${flaggedProviders.length} flagged providers · status: ${byStatus} · ${excludedCount} excluded`;
 }
 
 async function load() {
@@ -851,8 +719,8 @@ async function load() {
     .catch(() => []);
   await loadStatusTable({
     footerId: "summary",
-    nameCell,
-    statusColumns: 9, boundaryColumns: [0, 2, 5, 7],
+    nameCell: placeholderNameCells,
+    statusColumns: 8, boundaryColumns: [0, 2, 5, 6],
     onLoaded: async (data) => {
       sources = data;
       // Same field a source row gets from server.py, so the filter, footer
@@ -863,61 +731,63 @@ async function load() {
   });
 }
 
-document.getElementById("refresh-btn").addEventListener("click", load);
 
-// The Flagged filter's own narrowing select: "status:waiting",
-// "reason:data_too_old", "reason:" (no reason yet) or "" (all).
-function flagMatcher(value) {
-  if (!value) return () => true;
-  const [kind, arg] = value.split(":");
-  if (kind === "status" && arg === "find-contact") return needsContactFound;
-  if (kind === "status") return (m) => m.flag_status === arg;
-  if (kind === "reason") return (m) => (arg ? (m.flag_reasons || []).includes(arg) : !(m.flag_reasons || []).length);
-  return () => true;
-}
+// --- Filters -------------------------------------------------------------------
+// View dropdown + column filters/sort/search, kept in the URL (/table-filter.js).
+const isProvider = (r) => r.kind === "provider";
+const markersOf = (r) => (isProvider(r) ? providerMarkers(r._p) : r.markers);
+const STAGE_ORDER = ["complete", "needs_review", "not_complete", "partial", "stale", "not_started", "missing", "not_built", "not_applicable", "—"];
+const stageColumn = (label, get) => ({
+  label,
+  values: (r) => [isProvider(r) ? "—" : get(r)],
+  format: (v) => v.replace(/_/g, " "),
+  order: STAGE_ORDER,
+  sort: (r) => STAGE_ORDER.indexOf(isProvider(r) ? "—" : get(r)),
+});
 
-function fillFlagFilter() {
-  const sel = document.getElementById("flag-filter");
-  sel.add(new Option("All flags", ""));
-  const group = (label, options) => {
-    const g = document.createElement("optgroup");
-    g.label = label;
-    for (const [text, value] of options) g.appendChild(new Option(text, value));
-    sel.appendChild(g);
-  };
-  group("Follow-up", [
-    ...FLAG_STATUSES.map((st) => [FLAG_STATUS_LABELS[st] || st, `status:${st}`]),
-    ["Find contact (no contact yet)", "status:find-contact"],
-  ]);
-  group("Reason", [
-    ...Object.entries(FLAG_REASONS).map(([code, info]) => [info.label, `reason:${code}`]),
-    ["No reason yet", "reason:"],
-  ]);
-}
-fillFlagFilter();
+const tableFilter = createTableFilter({
+  columns: {
+    provider: {
+      label: "Provider",
+      filter: false,
+      values: () => [],
+      sort: (r) => (isProvider(r) ? r.name : r.provider.name || "").toLowerCase(),
+    },
+    province: {
+      label: "Prov.",
+      values: (r) => [(isProvider(r) ? r.province : r.provider.province) || "—"],
+      sort: (r) => (isProvider(r) ? r.province : r.provider.province) || "",
+    },
+    source: { label: "Source", filter: false, values: () => [], sort: (r) => (isProvider(r) ? "" : (r.title || sourceLabel(r.source_id, r.provider.id)).toLowerCase()) },
+    metadata: stageColumn("Metadata", (s) => s.collection.metadata),
+    raw: stageColumn("Raw", (s) => s.collection.raw),
+    map: stageColumn("Map", (s) => s.tools.column_mapping),
+    preprocess: stageColumn("Preprocess", (s) => s.tools.preprocessing),
+    classify: stageColumn("Classify", (s) => s.tools.classification),
+    process: stageColumn("Process", (s) => s.pipeline.processing),
+    notes: notesFilterColumn(markersOf),
+    status: statusFilterColumn(markersOf),
+  },
+  search: (r) =>
+    isProvider(r)
+      ? [r.name, r.provider_id, r.province, r.notes, r.contact].join(" ")
+      : [r.source_id, r.title, r.provider.name, r.provider.id, r.provider.province, r.markers.notes].join(" "),
+  onChange: () => sources && render(),
+});
+for (const th of document.querySelectorAll("#rows th[data-col]")) tableFilter.attachHeader(th, th.dataset.col);
+tableFilter.attachSearch(document.getElementById("table-search"));
+tableFilter.attachSummary(document.getElementById("table-summary"));
 
 const filterSelect = document.getElementById("filter-mode");
-const flagFilterSelect = document.getElementById("flag-filter");
-function updateFlagFilterVisibility() {
-  flagFilterSelect.classList.toggle("hidden", filterSelect.value !== "flagged");
-}
-try {
-  const savedFilter = localStorage.getItem("home-filter-mode");
-  if (savedFilter) filterSelect.value = savedFilter;
-  const savedFlagFilter = localStorage.getItem("home-flag-filter");
-  if (savedFlagFilter && [...flagFilterSelect.options].some((o) => o.value === savedFlagFilter)) {
-    flagFilterSelect.value = savedFlagFilter;
-  }
-} catch {}
-updateFlagFilterVisibility();
-filterSelect.addEventListener("change", () => {
-  try { localStorage.setItem("home-filter-mode", filterSelect.value); } catch {}
-  updateFlagFilterVisibility();
-  if (sources) render();
-});
-flagFilterSelect.addEventListener("change", () => {
-  try { localStorage.setItem("home-flag-filter", flagFilterSelect.value); } catch {}
-  if (sources) render();
-});
+bindViewSelect(filterSelect, () => sources && render());
+
+// Refresh statuses — in the filter bar.
+const refreshBtn = document.createElement("button");
+refreshBtn.type = "button";
+refreshBtn.className = "refresh-btn";
+refreshBtn.title = "Refresh status";
+refreshBtn.textContent = "↻";
+refreshBtn.addEventListener("click", load);
+document.querySelector(".header-filters").appendChild(refreshBtn);
 
 load();

@@ -50,8 +50,7 @@ async function copyCommand(badge, command) {
   }, 1000);
 }
 
-// Classification's status link, plus any follow-ups left on the source: its
-// note (full text on hover) and a count per flag.
+// Classification's status link, plus a count per mapping flag.
 function classificationCell(s) {
   if (s.blocked) {
     const td = document.createElement("td");
@@ -65,26 +64,12 @@ function classificationCell(s) {
     return td;
   }
   const td = linkedCell(s.classification, `/classification/review.html?id=${encodeURIComponent(s.source_id)}`);
-  if (s.source_notes && !s.source_flagged) {
-    const note = document.createElement("span");
-    note.className = "review-marker";
-    note.textContent = "note";
-    note.title = s.source_notes;
-    td.appendChild(note);
-  }
-  if (s.source_flagged) {
-    const marker = document.createElement("span");
-    marker.className = "review-marker review-marker-flagged";
-    marker.textContent = "flagged";
-    marker.title = s.source_notes || "No note";
-    td.appendChild(marker);
-  }
+  // Per-mapping review flags left during classification ("1 conflict").
   for (const [flag, count] of Object.entries(s.classification_flag_counts)) {
     if (!count) continue;
-    const marker = document.createElement("span");
-    marker.className = `review-marker review-marker-${flag}`;
-    marker.textContent = `${count} ${flag}`;
-    td.appendChild(marker);
+    const pill = notesPill(`${count} ${flag}`, flag);
+    pill.classList.add("class-flag");
+    td.appendChild(pill);
   }
   return td;
 }
@@ -155,25 +140,28 @@ function isRowComplete(s) {
   );
 }
 
-function nameCell(sourceId) {
-  const nameTd = document.createElement("td");
-  nameTd.className = "name";
-  const nameBtn = document.createElement("button");
-  nameBtn.type = "button";
-  nameBtn.className = "source-card-trigger";
-  nameBtn.textContent = sourceId;
-  nameBtn.addEventListener("click", () => openSourceCard(sourceId));
-  nameTd.appendChild(nameBtn);
-  return nameTd;
+// The source's own note/flag/exclude (shared pills, /flag-editor.js) — read
+// only here; edited from Home's Notes column or the review pages.
+function notesCell(m) {
+  const td = document.createElement("td");
+  td.className = "notes-cell";
+  const pills = m.flagged ? compactPills([...flagPills(m), ...(m.excluded ? [notesPill("excluded", "excluded")] : [])]) : [];
+  if (m.flagged) pills.push(statusPill(m));
+  else if (m.excluded) pills.push(notesPill("excluded", "excluded"));
+  else if (m.notes) pills.push(notesPill("note", "note"));
+  td.append(...pills);
+  td.title = m.notes || "";
+  return td;
 }
 
 function renderRow(s) {
   const tr = document.createElement("tr");
-  tr.appendChild(nameCell(s.source_id));
+  tr.append(providerCell(s.provider), provinceCell(s.provider.province), sourceCell(s.source_id, s.provider.id, s.title));
 
   tr.appendChild(linkedCell(s.column_mapping, `/column-mapping/map.html?id=${encodeURIComponent(s.source_id)}`));
   tr.appendChild(preprocessingCell(s.preprocessing, s.source_id));
   tr.appendChild(classificationCell(s));
+  tr.appendChild(notesCell(s.markers));
 
   return tr;
 }
@@ -204,11 +192,8 @@ function render() {
     visible = sources.filter(isRowComplete);
   } else if (filterMode === "incomplete") {
     visible = sources.filter((s) => !isRowComplete(s));
-  } else if (filterMode === "follow_up") {
-    visible = sources.filter(
-      (s) => s.source_notes || s.source_flagged || Object.values(s.classification_flag_counts).some(Boolean)
-    );
   }
+  visible = tableFilter.apply(visible);
 
   const body = document.getElementById("rows-body");
   body.innerHTML = "";
@@ -227,7 +212,7 @@ function render() {
     (s) => s.classification === "complete" || s.classification === "not_applicable"
   ).length;
   // The source's own shared flag — see Home's Flagged filter for the full list.
-  const flaggedCount = sources.filter((s) => s.source_flagged).length;
+  const flaggedCount = sources.filter((s) => s.markers.flagged).length;
   document.getElementById("progress").textContent =
     `${mappedCount} / ${sources.length} mapped · ${classifiedCount} / ${sources.length} classified · ${flaggedCount} flagged`;
 }
@@ -236,8 +221,8 @@ async function load() {
   sources = null;
   await loadStatusTable({
     footerId: "progress",
-    nameCell,
-    statusColumns: 3,
+    nameCell: placeholderNameCells,
+    statusColumns: 4,
     onLoaded: (data) => {
       sources = data;
       render();
@@ -247,12 +232,45 @@ async function load() {
 
 document.getElementById("refresh-btn").addEventListener("click", load);
 
-const filterSelect = document.getElementById("filter-mode");
-const savedFilter = localStorage.getItem("prep-filter-mode");
-if (savedFilter) filterSelect.value = savedFilter;
-filterSelect.addEventListener("change", () => {
-  localStorage.setItem("prep-filter-mode", filterSelect.value);
-  if (sources) render();
+// --- Filters -------------------------------------------------------------------
+// View dropdown + column filters/sort/search, kept in the URL (/table-filter.js).
+const STAGE_ORDER = ["complete", "needs_review", "not_complete", "blocked", "stale", "not_started", "not_built", "not_applicable"];
+const stageColumn = (label, get) => ({
+  label,
+  values: (s) => [get(s)],
+  format: (v) => v.replace(/_/g, " "),
+  order: STAGE_ORDER,
+  sort: (s) => STAGE_ORDER.indexOf(get(s)),
 });
+
+const tableFilter = createTableFilter({
+  columns: {
+    provider: { label: "Provider", filter: false, values: () => [], sort: (s) => (s.provider.name || "").toLowerCase() },
+    province: { label: "Prov.", values: (s) => [s.provider.province || "—"], sort: (s) => s.provider.province || "" },
+    source: { label: "Source", filter: false, values: () => [], sort: (s) => (s.title || sourceLabel(s.source_id, s.provider.id)).toLowerCase() },
+    map: stageColumn("Map", (s) => s.column_mapping),
+    preprocess: stageColumn("Preprocess", (s) => s.preprocessing),
+    classify: {
+      ...stageColumn("Classify", (s) => s.classification),
+      // Mapping flags too: "conflict" / "unsure" alongside the status.
+      values: (s) => [
+        s.classification,
+        ...Object.entries(s.classification_flag_counts).filter(([, n]) => n).map(([f]) => `flag:${f}`),
+      ],
+      format: (v) => (v.startsWith("flag:") ? `has ${v.slice(5)}` : v.replace(/_/g, " ")),
+      group: (v) => (v.startsWith("flag:") ? "Mapping flags" : "Status"),
+      order: [...STAGE_ORDER, "flag:conflict", "flag:unsure"],
+    },
+    notes: notesFilterColumn((s) => s.markers, { status: true }),
+  },
+  search: (s) => [s.source_id, s.title, s.provider.name, s.provider.id, s.provider.province, s.markers.notes].join(" "),
+  onChange: () => sources && render(),
+});
+for (const th of document.querySelectorAll("#rows th[data-col]")) tableFilter.attachHeader(th, th.dataset.col);
+tableFilter.attachSearch(document.getElementById("table-search"));
+tableFilter.attachSummary(document.getElementById("table-summary"));
+
+const filterSelect = document.getElementById("filter-mode");
+bindViewSelect(filterSelect, () => sources && render());
 
 load();

@@ -65,39 +65,6 @@ th {
   border-left: 2px solid var(--ctp-surface2);
 }
 
-/* Opens the cross-page source-info card (see /source-card.js) — plain text
-   otherwise (same weight/color as before this existed), cursor + hover
-   underline are the only tell that it's clickable, since it isn't a
-   navigational link like the mauve ones elsewhere. */
-.source-card-trigger {
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  font-weight: 600;
-  color: inherit;
-  cursor: pointer;
-}
-
-.source-card-trigger:hover {
-  text-decoration: underline;
-}
-
-/* A long source id is cut with "…" rather than widening the column (full
-   id on hover, via nameCell's title). */
-td.name {
-  overflow: hidden;
-}
-
-td.name .source-card-trigger {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
-
 td a {
   text-decoration: none;
 }
@@ -179,7 +146,7 @@ td a {
    a neighbouring cell (th/td are nowrap table-wide above). */
 td.notes-cell {
   overflow: hidden;
-  white-space: normal;
+  white-space: nowrap;
   border-left: 2px solid var(--ctp-surface2);
 }
 
@@ -188,8 +155,9 @@ td.notes-cell {
    different from the same pill sitting beside another. */
 .notes-trigger {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  align-items: center;
   gap: 0.2rem;
   width: 100%;
   min-height: 1.5rem;
@@ -214,61 +182,8 @@ tr:hover .notes-trigger.notes-empty,
   opacity: 1;
 }
 
-.notes-pill {
-  display: inline-block;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1.3;
-  white-space: nowrap;
-  background: color-mix(in srgb, var(--ctp-overlay0, #888) 16%, var(--color-panel-bg));
-  color: var(--color-text-secondary);
-}
-
 .notes-trigger:hover .notes-pill {
   filter: brightness(0.95);
-}
-
-.notes-pill-flagged,
-.notes-pill-unsure {
-  background: color-mix(in srgb, var(--ctp-yellow) 22%, var(--color-panel-bg));
-  color: color-mix(in srgb, var(--ctp-yellow) 70%, var(--color-text));
-}
-
-.notes-pill-excluded,
-.notes-pill-conflict {
-  background: color-mix(in srgb, var(--ctp-red) 18%, var(--color-panel-bg));
-  color: var(--ctp-red);
-}
-
-.notes-pill-note {
-  background: color-mix(in srgb, var(--ctp-blue, #1e66f5) 16%, var(--color-panel-bg));
-  color: var(--ctp-blue, #1e66f5);
-}
-
-/* Flag reasons — each its own accent, set inline as --pill-accent from the
-   project's flag_reasons (helpers/source_notes.py's REASON_COLORS). Then the
-   follow-up status, in its own column: contact / waiting / review. */
-.notes-pill-reason,
-.reason-chip[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--pill-accent) 20%, var(--color-panel-bg));
-  color: color-mix(in srgb, var(--pill-accent) 78%, var(--color-text));
-}
-
-.notes-pill-status-contact {
-  background: color-mix(in srgb, var(--ctp-peach) 22%, var(--color-panel-bg));
-  color: color-mix(in srgb, var(--ctp-peach) 78%, var(--color-text));
-}
-
-.notes-pill-status-waiting {
-  background: color-mix(in srgb, var(--ctp-sapphire) 20%, var(--color-panel-bg));
-  color: color-mix(in srgb, var(--ctp-sapphire) 80%, var(--color-text));
-}
-
-.notes-pill-status-review {
-  background: color-mix(in srgb, var(--ctp-mauve) 18%, var(--color-panel-bg));
-  color: color-mix(in srgb, var(--ctp-mauve) 80%, var(--color-text));
 }
 
 td.followup-cell {
@@ -279,34 +194,8 @@ td.followup-cell {
   margin-left: 0.3rem;
 }
 
-/* Contact, but nobody on file yet — same accent, outlined rather than
-   filled, so it reads as the step before Contact. */
-.notes-pill-status-find-contact {
-  background: none;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ctp-peach) 70%, var(--color-panel-bg));
-  color: color-mix(in srgb, var(--ctp-peach) 78%, var(--color-text));
-}
-
-
 /* Provider-level follow-ups under the Flagged filter (renderProviderRow) —
    no stage statuses, so one cell spans those columns. */
-.provider-row .provider-name {
-  font-weight: 600;
-}
-
-.provider-row td.name div {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.provider-rest {
-  white-space: normal;
-}
-
-.provider-rest .meta {
-  margin-left: 0.6rem;
-}
-
 .notes-link {
   color: var(--ctp-mauve);
   text-decoration: none;
@@ -326,44 +215,6 @@ td.followup-cell {
 .notes-panel {
   width: 560px;
   max-width: calc(100vw - 2rem);
-}
-
-.notes-status-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.9rem;
-  font-size: 0.85rem;
-}
-
-/* The note, editable in place: reads like text until hovered/focused,
-   grows with its content (app.js's growNoteInput). */
-textarea.notes-inline {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 2.6rem;
-  padding: 0.45rem 0.65rem;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--ctp-surface0);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 0.95rem;
-  line-height: 1.4;
-  resize: none;
-  overflow-y: auto;
-}
-
-textarea.notes-inline:hover {
-  border-color: var(--color-border);
-}
-
-textarea.notes-inline:focus {
-  outline: none;
-  border-color: var(--ctp-mauve);
-  background: var(--color-input-bg);
 }
 
 .notes-facts {
@@ -422,40 +273,6 @@ input.notes-inline-input:focus {
 
 .notes-checks {
   margin-top: 0.6rem;
-}
-
-/* Under the Flagged checkbox: reason chips (toggle buttons) + status. */
-.notes-flag-detail {
-  margin: 0.5rem 0 0 1.6rem;
-}
-
-.notes-flag-reasons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.reason-chip {
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--ctp-surface2);
-  background: none;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.reason-chip[aria-pressed="true"] {
-  border-color: transparent;
-}
-
-.notes-flag-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
 }
 
 .notes-hint {
@@ -521,3 +338,23 @@ input.notes-inline-input:focus {
   margin-left: auto;
 }
 
+
+/* The YAML modal opened from inside the notes popout sits above it. */
+.modal-overlay.modal-stacked {
+  z-index: 120;
+}
+
+/* A link-styled button (popout's Metadata: View). */
+.notes-link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ctp-mauve);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.notes-link-btn:hover {
+  text-decoration: underline;
+}
