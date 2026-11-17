@@ -464,3 +464,47 @@ button.not-found.confirmed:hover {
 
 /* .modal-overlay/.modal-panel/.modal-header/.modal-close/.modal-actions
    now live in the shared /modal.css (see index.html's <link>). */
+
+/* source id row: fixed provider prefix, then the editable suffix */
+.id-prefix {
+  flex-shrink: 0;
+}
+
+.create-source-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-color: var(--ctp-green);
+  color: var(--ctp-green);
+}
+
+.create-source-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ctp-green) 15%, var(--color-panel-bg));
+}
+
+.create-source-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Pick-or-drop target for the downloaded file, under raw_filename */
+.drop-zone {
+  padding: 0.75rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: var(--ctp-peach);
+  background: color-mix(in srgb, var(--ctp-peach) 10%, var(--color-panel-bg));
+  color: var(--color-text);
+}
+
+.drop-zone.uploading {
+  opacity: 0.6;
+  pointer-events: none;
+}

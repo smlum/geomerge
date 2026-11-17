@@ -1,7 +1,12 @@
 // Source metadata modal — one block per source (metadata.yaml) for a
-// checklist row, opened from the table's Metadata column or ?id=<source_id>.
-// Loaded before app.js; uses its globals (rows, loadRows, postJson, …) only
-// at call time.
+// checklist row, opened from the table's Metadata column, right after
+// "Found", or via ?id=<source_id>. Loaded before app.js; uses its globals
+// (rows, loadRows, postJson, slugify, …) only at call time.
+//
+// A new source starts as just its title (plus the dataset link): the id is
+// suggested from the title, and nothing exists on disk until "Create
+// source". Only then do the rest of the fields — and the drop zone that puts
+// the downloaded file in the right raw folder — appear.
 
 const CURRENT_YEAR = new Date().getFullYear();
 const EARLIEST_YEAR = 2000;
@@ -21,34 +26,54 @@ const METADATA_FIELDS = [
   { key: "notes" },
 ];
 
+// Shown before the source exists; everything else waits for "Create source".
+const PRE_CREATE_FIELDS = new Set(["dataset_title", "dataset_page_url"]);
+
 // A provider can have more than one relevant dataset (e.g. bike lanes and a
 // separate multi-use-trails layer) — the modal shows one independent block
-// per source, all fields visible immediately (no separate "create" step),
-// plus a "+ Add another source" button that appends one more blank block.
-// Numbering ("Source 1"/"Source 2") and the per-block Remove button only
-// show once there's more than one — with just one, neither means anything.
+// per source, plus a "+ Add another source" button that appends one more
+// blank block. Numbering ("Source 1"/"Source 2") and the per-block Remove
+// button only show once there's more than one.
 let modalRowIndex = null;
 let modalProviderId = null;
 let modalNewSourceDefaults = {};
-let modalBlocks = []; // { uid, sourceId, block, heading, pathLine, removeBtn, labelInput }
+let modalBlocks = []; // { uid, sourceId, block, heading, pathLine, removeBtn, labelInput, titleInput, rest }
 let blockUidCounter = 0;
 let fieldValidators = {}; // fieldValidators[uid][fieldKey] = markRequired fn
 
 // What generate() will actually prefill a brand-new source with — mirrored
-// here so a not-yet-created block shows the same defaults immediately,
-// rather than appearing blank until Save.
+// here so a not-yet-created block shows the same defaults immediately.
 function newSourceDefaults(row) {
   return {
     dataset_page_url: row.source_url || "",
     license_name: row.portal_license_name || "",
     license_url: row.portal_license_url || "",
-    open_license: null, // never reviewed yet — must be null, not undefined, to match generate()'s default and keep the auto-follow-as-you-type checkbox behavior working
+    open_license: null, // never reviewed yet — must be null, not undefined, to keep the auto-follow-as-you-type checkbox behavior working
     contact: row.contact || "",
     retrieved_date: new Date().toISOString().slice(0, 10),
   };
 }
 
+// Id suffix suggested from a dataset title: its slug, minus words the
+// provider id already has ("Ontario Trail Network" for on_ontario ->
+// trail_network), capped at a readable length on a word boundary.
+function suffixFromTitle(title) {
+  const providerWords = new Set(modalProviderId.split("_").slice(1));
+  const words = slugify(title).split("_").filter(Boolean);
+  const kept = words.filter((w) => !providerWords.has(w));
+  let suffix = "";
+  for (const w of kept.length ? kept : words) {
+    const next = suffix ? `${suffix}_${w}` : w;
+    if (suffix && next.length > 40) break;
+    suffix = next;
+  }
+  return suffix;
+}
+
 async function openMetadata(row) {
+  // Always the freshest copy — a row object captured before a create/rename
+  // has stale source_ids, which used to spawn duplicate sources.
+  row = rows.find((r) => r.row_index === row.row_index) || row;
   modalRowIndex = row.row_index;
   modalProviderId = row.provider_id;
   modalNewSourceDefaults = newSourceDefaults(row);
@@ -74,6 +99,8 @@ async function openMetadata(row) {
   refreshBlockChrome();
 
   document.getElementById("metadata-modal").classList.remove("hidden");
+  const firstNew = modalBlocks.find((b) => !b.sourceId);
+  if (firstNew) firstNew.titleInput.focus();
 }
 
 function refreshBlockChrome() {
@@ -83,6 +110,11 @@ function refreshBlockChrome() {
     b.heading.classList.toggle("hidden", !multi);
     b.removeBtn.classList.toggle("hidden", !multi);
   });
+}
+
+function setPathLine(blockState) {
+  const id = blockState.sourceId || `${modalProviderId}_${blockState.labelInput.value.trim()}`;
+  blockState.pathLine.textContent = `${blockState.sourceId ? "editing" : "will create"}: ${sourcesDir}/${id}/metadata.yaml`;
 }
 
 function addSourceBlock(sourceId, data) {
@@ -107,157 +139,22 @@ function addSourceBlock(sourceId, data) {
   pathLine.className = "meta source-path";
   block.appendChild(pathLine);
 
-  const blockState = { uid, sourceId, block, heading, pathLine, removeBtn, labelInput: null };
+  const blockState = { uid, sourceId, block, heading, pathLine, removeBtn, labelInput: null, titleInput: null, rest: null };
   modalBlocks.push(blockState);
   removeBtn.onclick = () => removeSourceBlock(blockState);
 
-  function updatePathPreview() {
-    if (blockState.sourceId) return; // locked once real — this stays static
-    const isFirst = modalBlocks[0] === blockState;
-    const label = blockState.labelInput.value.trim();
-    if (label) {
-      pathLine.textContent = `editing: ${sourcesDir}/${modalProviderId}_${slugify(label)}/metadata.yaml`;
-    } else if (isFirst) {
-      pathLine.textContent = `editing: ${sourcesDir}/${modalProviderId}_cycling/metadata.yaml`;
-    } else {
-      pathLine.textContent = "editing: (enter a label first)";
-    }
-  }
-
-  if (sourceId) {
-    pathLine.textContent = `editing: ${sourcesDir}/${sourceId}/metadata.yaml`;
-  }
-  // Uncommitted blocks get their initial preview set once labelInput exists,
-  // right after it's created below — updatePathPreview() reads its value.
-
   // The source's own note (metadata.yaml — shared by every stage, see
-  // helpers/source_notes.py), not the checklist row's provider-level note
-  // in the table's Notes column. The two used to be copied into each other,
-  // which overwrote per-source notes on providers with more than one source.
+  // helpers/source_notes.py), not the checklist row's provider-level note.
   data.notes = data.notes || "";
 
   const form = document.createElement("form");
   form.className = "edit-form";
+  const rest = document.createElement("div");
+  rest.className = "edit-form" + (sourceId ? "" : " hidden");
+  blockState.rest = rest;
   fieldValidators[uid] = {};
 
   for (const field of METADATA_FIELDS) {
-    // label lives right before raw_filename — optional for a provider's
-    // first source (still useful, e.g. "multi_use_trails"), required for
-    // any source after that (there has to be some way to tell them apart).
-    // Baked into source_id once created, so it's locked from then on.
-    if (field.key === "raw_filename") {
-      const isFirst = modalBlocks[0] === blockState;
-      const labelRequired = !sourceId && !isFirst;
-
-      const labelLabelEl = document.createElement("label");
-      labelLabelEl.textContent = "label" + (labelRequired ? " *" : "");
-      labelLabelEl.title = "Baked into this source's id once created — can't be changed afterward.";
-
-      const labelRow = document.createElement("div");
-      labelRow.className = "field-row";
-      const labelInput = document.createElement("input");
-      labelInput.type = "text";
-      labelInput.placeholder = isFirst ? "optional, e.g. multi_use_trails" : "required, e.g. multi_use_trails";
-      labelInput.value = data.label || "";
-      labelInput.disabled = Boolean(sourceId);
-      labelInput.id = `modal-field-${uid}-label`;
-
-      const markLabelRequired = () => {
-        if (labelRequired) labelInput.classList.toggle("required-empty", !labelInput.value);
-      };
-      markLabelRequired();
-      fieldValidators[uid].label = markLabelRequired;
-      if (!sourceId) {
-        labelInput.addEventListener("input", () => {
-          markLabelRequired();
-          updatePathPreview();
-        });
-      }
-
-      labelRow.appendChild(labelInput);
-
-      // Not created yet: "Create folder" makes the source now (same as
-      // Save would — metadata.yaml + its raw data folder, label locked),
-      // without closing the modal, so the raw file can be dropped in and
-      // Detect run straight away. Needs a label, except on the first source.
-      if (!sourceId) {
-        const createBtn = document.createElement("button");
-        createBtn.type = "button";
-        createBtn.className = "detect-btn";
-        createBtn.textContent = "Create folder";
-        createBtn.title = "Create this source and its raw data folder now";
-        const syncCreateBtn = () => {
-          createBtn.disabled = !labelInput.value.trim() && modalBlocks[0] !== blockState;
-        };
-        syncCreateBtn();
-        labelInput.addEventListener("input", syncCreateBtn);
-        createBtn.onclick = async () => {
-          const statusEl = document.getElementById("modal-save-status");
-          const res = await postJson("api/generate", { row_index: modalRowIndex, label: labelInput.value.trim() });
-          if (!res.ok) {
-            statusEl.textContent = res.error || "Failed to create source";
-            return;
-          }
-          blockState.sourceId = res.source_id;
-          pathLine.textContent = `editing: ${sourcesDir}/${res.source_id}/metadata.yaml`;
-          labelInput.disabled = true;
-          labelInput.classList.remove("required-empty");
-          createBtn.remove();
-          statusEl.textContent = `Created ${res.source_id} and its raw data folder — drop the file in, then Detect.`;
-        };
-        labelRow.appendChild(createBtn);
-      }
-
-      // Locked by default (baked into source_id already) — but early on,
-      // before anything downstream depends on that exact id, a rename is
-      // still safe. Two clicks: first unlocks the field to edit, second
-      // actually renames the folder/yaml/checklist entry on disk.
-      if (sourceId) {
-        if (data._can_rename) {
-          const renameBtn = document.createElement("button");
-          renameBtn.type = "button";
-          renameBtn.className = "detect-btn";
-          renameBtn.textContent = "Rename";
-          renameBtn.onclick = async () => {
-            if (labelInput.disabled) {
-              labelInput.disabled = false;
-              labelInput.focus();
-              renameBtn.textContent = "Confirm rename";
-              return;
-            }
-            const newLabel = labelInput.value.trim();
-            const ok = confirm(
-              `Rename this source's id to match "${newLabel || "(default)"}"? This moves its folder on disk.`
-            );
-            if (!ok) return;
-            const res = await postJson("api/rename_source", {
-              row_index: modalRowIndex,
-              old_source_id: blockState.sourceId,
-              label: newLabel,
-            });
-            const statusEl = document.getElementById("modal-save-status");
-            if (!res.ok) {
-              statusEl.textContent = res.error || "Failed to rename";
-              return;
-            }
-            blockState.sourceId = res.source_id;
-            pathLine.textContent = `editing: ${sourcesDir}/${res.source_id}/metadata.yaml`;
-            labelInput.disabled = true;
-            renameBtn.textContent = "Rename";
-            await loadRows();
-          };
-          labelRow.appendChild(renameBtn);
-        } else {
-          labelInput.title = "Can't rename — later pipeline steps already reference this source.";
-        }
-      }
-
-      labelLabelEl.appendChild(labelRow);
-      form.appendChild(labelLabelEl);
-      blockState.labelInput = labelInput;
-      if (!sourceId) updatePathPreview();
-    }
-
     const required = requiredFields.includes(field.key);
 
     const label = document.createElement("label");
@@ -326,6 +223,7 @@ function addSourceBlock(sourceId, data) {
       detectBtn.type = "button";
       detectBtn.className = "detect-btn";
       detectBtn.textContent = "Detect";
+      detectBtn.title = "Use the newest file already in this source's raw folder";
       detectBtn.onclick = () => detectRaw(blockState);
       row.appendChild(detectBtn);
     }
@@ -342,19 +240,17 @@ function addSourceBlock(sourceId, data) {
       row.appendChild(sameAsBtn);
     }
 
-    // Lives on license_url's row rather than as its own field — it's the
-    // one binary fact that matters most for any data release, so it stays
-    // right next to the license itself instead of scrolling past it.
+    // Lives on license_url's row — the one binary fact that matters most for
+    // any data release, so it stays right next to the license itself.
     if (field.key === "license_url") {
       const checkboxLabel = document.createElement("label");
       checkboxLabel.className = "inline-checkbox";
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.id = `modal-field-${uid}-open_license`;
-      // Respect an explicit saved value either way; only auto-follow the
-      // URL field (live, as it's typed) when it's never been reviewed —
-      // and stop following the moment the user touches the checkbox
-      // themselves, so a manual choice never gets silently overwritten.
+      // Respect an explicit saved value either way; only auto-follow the URL
+      // field when it's never been reviewed, and stop the moment the user
+      // touches the checkbox themselves.
       let openLicenseTouched = data.open_license !== null;
       checkbox.checked = data.open_license === true || (!openLicenseTouched && Boolean(input.value));
       checkbox.addEventListener("change", () => {
@@ -369,11 +265,212 @@ function addSourceBlock(sourceId, data) {
     }
 
     label.appendChild(row);
-    form.appendChild(label);
+    (PRE_CREATE_FIELDS.has(field.key) ? form : rest).appendChild(label);
+
+    if (field.key === "dataset_title") {
+      blockState.titleInput = input;
+      form.appendChild(buildIdRow(blockState, data));
+    }
+    if (field.key === "raw_filename") rest.appendChild(buildDropZone(blockState));
   }
 
+  form.appendChild(rest);
   block.appendChild(form);
   container.appendChild(block);
+  setPathLine(blockState);
+}
+
+// source id: provider prefix + an editable suffix. Before creation the
+// suffix follows the title (until edited by hand) and "Create source" is the
+// block's one action; afterwards it's locked, with Rename while nothing
+// downstream depends on the id yet.
+function buildIdRow(blockState, data) {
+  const { sourceId, titleInput } = blockState;
+  const statusEl = () => document.getElementById("modal-save-status");
+
+  const wrapper = document.createElement("label");
+  wrapper.textContent = "source id";
+  const row = document.createElement("div");
+  row.className = "field-row";
+  const prefix = document.createElement("span");
+  prefix.className = "id-prefix meta";
+  prefix.textContent = `${modalProviderId}_`;
+  row.appendChild(prefix);
+
+  const labelInput = document.createElement("input");
+  labelInput.type = "text";
+  labelInput.id = `modal-field-${blockState.uid}-label`;
+  labelInput.value = sourceId ? sourceId.slice(modalProviderId.length + 1) : suffixFromTitle(titleInput.value);
+  labelInput.disabled = Boolean(sourceId);
+  blockState.labelInput = labelInput;
+  row.appendChild(labelInput);
+
+  if (!sourceId) {
+    let suffixEdited = false;
+    const createBtn = document.createElement("button");
+    createBtn.type = "button";
+    createBtn.className = "create-source-btn";
+    createBtn.textContent = "Create source";
+    const sync = () => {
+      createBtn.disabled = !titleInput.value.trim() || !labelInput.value.trim();
+      setPathLine(blockState);
+    };
+    titleInput.addEventListener("input", () => {
+      if (!suffixEdited) labelInput.value = suffixFromTitle(titleInput.value);
+      sync();
+    });
+    labelInput.addEventListener("input", () => {
+      suffixEdited = true;
+      sync();
+    });
+    // Enter in the title creates, rather than submitting the form.
+    titleInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!createBtn.disabled) createBtn.click();
+      }
+    });
+    createBtn.onclick = async () => {
+      createBtn.disabled = true;
+      const ok = await createSource(blockState);
+      if (!ok) {
+        sync();
+        return;
+      }
+      createBtn.remove();
+      statusEl().textContent = `Created ${blockState.sourceId}.`;
+    };
+    sync();
+    row.appendChild(createBtn);
+  } else if (data._can_rename) {
+    // Two clicks: first unlocks the field (suggesting the title's suffix if
+    // the id is still a generic default), second renames on disk.
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "detect-btn";
+    renameBtn.textContent = "Rename";
+    renameBtn.onclick = async () => {
+      if (labelInput.disabled) {
+        labelInput.disabled = false;
+        if (/^cycling(_\d+)?$/.test(labelInput.value) && titleInput.value.trim()) {
+          labelInput.value = suffixFromTitle(titleInput.value);
+        }
+        labelInput.focus();
+        renameBtn.textContent = "Confirm rename";
+        return;
+      }
+      const newLabel = labelInput.value.trim();
+      const ok = confirm(`Rename this source to ${modalProviderId}_${newLabel}? This moves its folders on disk.`);
+      if (!ok) return;
+      const res = await postJson("api/rename_source", {
+        row_index: modalRowIndex,
+        old_source_id: blockState.sourceId,
+        label: newLabel,
+      });
+      if (!res.ok) {
+        statusEl().textContent = res.error || "Failed to rename";
+        return;
+      }
+      blockState.sourceId = res.source_id;
+      setPathLine(blockState);
+      labelInput.disabled = true;
+      renameBtn.textContent = "Rename";
+      await loadRows();
+    };
+    row.appendChild(renameBtn);
+  } else {
+    labelInput.title = "Can't rename — later pipeline steps already reference this source.";
+  }
+
+  wrapper.appendChild(row);
+  return wrapper;
+}
+
+async function createSource(blockState) {
+  const uid = blockState.uid;
+  const res = await postJson("api/generate", {
+    row_index: modalRowIndex,
+    label: blockState.labelInput.value.trim(),
+    dataset_title: blockState.titleInput.value.trim(),
+    dataset_page_url: document.getElementById(`modal-field-${uid}-dataset_page_url`).value.trim(),
+  });
+  if (!res.ok) {
+    document.getElementById("modal-save-status").textContent = res.error || "Failed to create source";
+    return false;
+  }
+  blockState.sourceId = res.source_id;
+  blockState.labelInput.value = res.source_id.slice(modalProviderId.length + 1);
+  blockState.labelInput.disabled = true;
+  blockState.rest.classList.remove("hidden");
+  setPathLine(blockState);
+  await loadRows();
+  return true;
+}
+
+// Pick or drop the downloaded file: it's copied into this source's raw
+// folder (a zip unpacked), and raw_filename/format/retrieved_date are filled.
+function buildDropZone(blockState) {
+  const zone = document.createElement("div");
+  zone.className = "drop-zone";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.multiple = true;
+  fileInput.hidden = true;
+  const text = document.createElement("span");
+  zone.append(fileInput, text);
+
+  const filenameInput = () => document.getElementById(`modal-field-${blockState.uid}-raw_filename`);
+  const refreshText = () => {
+    text.textContent = filenameInput()?.value
+      ? "Drop a newer download here, or click to choose"
+      : "Drop the downloaded file here, or click to choose";
+  };
+  // raw_filename's input is created just before this zone.
+  setTimeout(refreshText);
+
+  zone.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) uploadRaw(blockState, fileInput.files, zone, refreshText);
+    fileInput.value = "";
+  });
+  zone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    zone.classList.add("drag-over");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    if (e.dataTransfer.files.length) uploadRaw(blockState, e.dataTransfer.files, zone, refreshText);
+  });
+  return zone;
+}
+
+async function uploadRaw(blockState, files, zone, refreshText) {
+  const statusEl = document.getElementById("modal-save-status");
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  zone.classList.add("uploading");
+  statusEl.textContent = `Copying ${files.length === 1 ? files[0].name : `${files.length} files`}…`;
+  let data;
+  try {
+    const res = await fetch(`api/source/${encodeURIComponent(blockState.sourceId)}/upload`, { method: "POST", body: form });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+  } catch (e) {
+    statusEl.textContent = e.message;
+    return;
+  } finally {
+    zone.classList.remove("uploading");
+  }
+  const uid = blockState.uid;
+  for (const key of ["raw_filename", "format", "retrieved_date"]) {
+    document.getElementById(`modal-field-${uid}-${key}`).value = data[key];
+    fieldValidators[uid]?.[key]?.();
+  }
+  statusEl.textContent = `Added ${data.raw_filename} to ${blockState.sourceId}.`;
+  refreshText();
+  await loadRows();
 }
 
 async function removeSourceBlock(blockState) {
@@ -395,28 +492,11 @@ async function removeSourceBlock(blockState) {
   if (blockState.sourceId) await loadRows();
 }
 
+// For a file put in data/raw/<source_id>/ some other way (e.g. a big download
+// fetched from the command line) — only offered once the source exists.
 async function detectRaw(blockState) {
   const statusEl = document.getElementById("modal-save-status");
-
-  // Not saved yet, but its raw folder may already exist: "Found" pre-creates
-  // data/raw/<provider_id>_cycling/ for a provider's first source the moment
-  // a source_url is set, well before its metadata.yaml is ever generated —
-  // so this mirrors that same (label-or-default) id, same as updatePathPreview,
-  // rather than requiring a save first just to look inside an existing folder.
-  let sourceId = blockState.sourceId;
-  if (!sourceId) {
-    const isFirst = modalBlocks[0] === blockState;
-    const label = blockState.labelInput.value.trim();
-    if (label) {
-      sourceId = `${modalProviderId}_${slugify(label)}`;
-    } else if (isFirst) {
-      sourceId = `${modalProviderId}_cycling`;
-    } else {
-      statusEl.textContent = "Enter a label first so this source's folder can be identified.";
-      return;
-    }
-  }
-  const res = await fetch(`api/detect_raw/${encodeURIComponent(sourceId)}`);
+  const res = await fetch(`api/detect_raw/${encodeURIComponent(blockState.sourceId)}`);
   const data = await res.json();
   if (!res.ok) {
     statusEl.textContent = data.error || "No file found";
@@ -445,15 +525,9 @@ async function saveModal() {
   const statusEl = document.getElementById("modal-save-status");
   for (const blockState of modalBlocks) {
     if (!blockState.sourceId) {
-      const label = blockState.labelInput.value.trim();
-      const res = await postJson("api/generate", { row_index: modalRowIndex, label });
-      if (!res.ok) {
-        statusEl.textContent = res.error || "Failed to create source";
-        return;
-      }
-      blockState.sourceId = res.source_id;
-      blockState.pathLine.textContent = `editing: ${sourcesDir}/${res.source_id}/metadata.yaml`;
-      blockState.labelInput.disabled = true;
+      // A block never given a title is just left uncreated.
+      if (!blockState.titleInput.value.trim()) continue;
+      if (!(await createSource(blockState))) return;
     }
 
     const updates = {};
@@ -475,6 +549,11 @@ document.getElementById("modal-close").addEventListener("click", closeModal);
 document.getElementById("metadata-modal").addEventListener("click", (e) => {
   if (e.target.id === "metadata-modal") closeModal();
 });
+// A file dropped anywhere else in the modal shouldn't make the browser
+// navigate away to open it.
+for (const type of ["dragover", "drop"]) {
+  document.getElementById("metadata-modal").addEventListener(type, (e) => e.preventDefault());
+}
 document.getElementById("modal-save").addEventListener("click", (e) => {
   e.preventDefault();
   saveModal();
@@ -484,4 +563,5 @@ document.getElementById("add-another-source-btn").addEventListener("click", () =
   // the row's Data URL is the first source's, not this one's.
   addSourceBlock(null, { ...modalNewSourceDefaults, dataset_page_url: "" });
   refreshBlockChrome();
+  modalBlocks[modalBlocks.length - 1].titleInput.focus();
 });

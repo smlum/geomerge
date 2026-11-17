@@ -11,6 +11,7 @@ Mounted under geomerge serve at /collection/ — see geomerge.tools.home.web.ser
 import re
 import shutil
 import unicodedata
+import zipfile
 from datetime import date
 from pathlib import Path
 
@@ -44,9 +45,9 @@ EDITABLE_ROW_FIELDS = [
     "province", "portal_url", "portal_license_name", "portal_license_url", "contact", "notes",
 ]
 
-# Best-effort guess only — surfaced via a manual "Detect" button, never applied
-# automatically, since a stray old download or an unzipped shapefile bundle
-# can easily fool a most-recently-modified-file heuristic.
+# Extension -> format. Applied directly to a file added through the modal's
+# drop zone (we know exactly which file it was); only a best-effort guess for
+# "Detect", whose most-recently-modified heuristic a stray old download can fool.
 FORMAT_BY_EXTENSION = {
     ".geojson": "geojson",
     ".json": "json",
@@ -56,6 +57,42 @@ FORMAT_BY_EXTENSION = {
     ".parquet": "parquet",
     ".csv": "csv",
 }
+
+# Which file in an added bundle (a zip's contents, or a shapefile's sibling
+# parts) is the one to read — earlier wins.
+MAIN_FILE_ORDER = [".shp", ".gpkg", ".geojson", ".parquet", ".json", ".csv"]
+
+
+def main_file(paths: list) -> Path:
+    files = [p for p in paths if p.is_file()]
+    for ext in MAIN_FILE_ORDER:
+        for p in files:
+            if p.suffix.lower() == ext:
+                return p
+    return files[0] if files else None
+
+
+def extract_zip(zip_path: Path) -> list:
+    """Unpacks into a sibling folder named after the zip, then deletes the
+    zip — the extracted files are what gets read. Returns the extracted paths."""
+    target = zip_path.parent / zip_path.stem
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir()
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            for member in zf.namelist():
+                # No writing outside target via "../" member names.
+                if not (target / member).resolve().is_relative_to(target.resolve()):
+                    raise ValueError(f"unsafe path in zip: {member}")
+            zf.extractall(target)
+    except Exception:
+        shutil.rmtree(target, ignore_errors=True)
+        raise
+    finally:
+        zip_path.unlink()
+    shutil.rmtree(target / "__MACOSX", ignore_errors=True)  # macOS zip junk
+    return [p for p in target.rglob("*") if not p.name.startswith(".")]
 
 
 def create_blueprint(config: dict = None) -> Blueprint:
@@ -324,18 +361,8 @@ def create_blueprint(config: dict = None) -> Blueprint:
         df.at[row_index, "checked"] = "x"
         df.at[row_index, "checked_date"] = today
         save_checklist(df)
-
-        # Ready for the download as soon as there's somewhere to point it, well
-        # before anyone gets around to generating the yaml. Uses the same
-        # (unlabeled) slug generate() would default to, so the two line up
-        # without needing source_ids set yet — only relevant for a
-        # provider's first source; later ones get their folder from
-        # generate() itself once a label's been chosen.
-        provider_id = df.at[row_index, "provider_id"]
-        existing_ids = source_ids_for(df.loc[row_index])
-        source_id = existing_ids[0] if existing_ids else next_source_id(provider_id)
-        (raw_dir / source_id).mkdir(parents=True, exist_ok=True)
-
+        # Nothing created on disk yet — the source (and its folders) only
+        # exists once it has a title, via generate().
         return jsonify({"checked_date": today})
 
     @bp.route("/api/not_found", methods=["POST"])
@@ -475,12 +502,13 @@ def create_blueprint(config: dict = None) -> Blueprint:
     def api_generate():
         # Always creates one new source and appends it to this row's
         # source_ids — a provider can have several, each with its own
-        # metadata.yaml. label is optional but permanent: it's baked into
-        # source_id right here and can't be changed afterward (same rule as
-        # provider_id elsewhere), so a collision has to be caught now.
+        # metadata.yaml. label (the id suffix, suggested from the title in
+        # the modal) is baked into source_id right here — renamable only
+        # until later stages use it — so a collision has to be caught now.
         data = request.get_json()
         row_index = int(data["row_index"])
         label = (data.get("label") or "").strip()
+        dataset_title = (data.get("dataset_title") or "").strip()
 
         df = load_checklist()
         if row_index not in df.index:
@@ -507,10 +535,11 @@ def create_blueprint(config: dict = None) -> Blueprint:
             "source_id": source_id,
             "label": label,
             "provider_id": row["provider_id"],
-            "dataset_title": "",
-            # The row's Data URL belongs to its first source — a later one
-            # (e.g. a separate trails layer) starts blank.
-            "dataset_page_url": "" if source_ids_for(row) else row["source_url"],
+            "dataset_title": dataset_title,
+            # As shown in the modal; otherwise the row's Data URL belongs to
+            # its first source — a later one (e.g. a trails layer) starts blank.
+            "dataset_page_url": data["dataset_page_url"].strip() if "dataset_page_url" in data
+            else ("" if source_ids_for(row) else row["source_url"]),
             "download_url": "",
             "format": "",
             "license_name": prefer_row("portal_license_name", "portal_license_name"),
@@ -526,9 +555,6 @@ def create_blueprint(config: dict = None) -> Blueprint:
         with open(out_path, "w") as f:
             yaml.dump(source, f, sort_keys=False, allow_unicode=True)
 
-        # Normally already created by "Found" (for a provider's first
-        # source) — this covers every other case: later sources, or this
-        # one's raw dir having been deleted since.
         (raw_dir / source_id).mkdir(parents=True, exist_ok=True)
 
         existing_ids = source_ids_for(row)
@@ -674,6 +700,50 @@ def create_blueprint(config: dict = None) -> Blueprint:
 
         latest, _, fmt = max(candidates, key=lambda c: c[1])
         return jsonify({"raw_filename": str(latest.relative_to(source_raw_dir)), "format": fmt})
+
+    @bp.route("/api/source/<source_id>/upload", methods=["POST"])
+    def api_source_upload(source_id):
+        # The modal's drop zone: copies the chosen/dropped file(s) into
+        # data/raw/<source_id>/ (a zip is unpacked), then records which file
+        # to read straight into metadata.yaml — the file's on disk now, so the
+        # yaml says so even if the modal's closed without saving.
+        out_path = yaml_path_for(source_id)
+        if not out_path.exists():
+            return jsonify({"error": "not found"}), 404
+        uploads = request.files.getlist("files")
+        if not uploads:
+            return jsonify({"error": "no file received"}), 400
+
+        source_raw_dir = raw_dir / source_id
+        source_raw_dir.mkdir(parents=True, exist_ok=True)
+        saved = []
+        for upload in uploads:
+            name = Path(upload.filename or "").name
+            if not name or name.startswith("."):
+                continue
+            dest = source_raw_dir / name
+            upload.save(dest)
+            saved.append(dest)
+
+        paths = []
+        try:
+            for p in saved:
+                paths.extend(extract_zip(p) if p.suffix.lower() == ".zip" else [p])
+        except (zipfile.BadZipFile, ValueError) as e:
+            return jsonify({"error": f"couldn't unpack: {e}"}), 400
+
+        chosen = main_file(paths)
+        if chosen is None:
+            return jsonify({"error": "nothing usable in that upload"}), 400
+        raw_filename = str(chosen.relative_to(source_raw_dir))
+        fmt = FORMAT_BY_EXTENSION.get(chosen.suffix.lower(), "other")
+        retrieved_date = str(date.today())
+
+        data = yaml.safe_load(out_path.read_text()) or {}
+        data.update({"raw_filename": raw_filename, "format": fmt, "retrieved_date": retrieved_date})
+        with open(out_path, "w") as f:
+            yaml.dump(data, f, sort_keys=False, allow_unicode=True)
+        return jsonify({"raw_filename": raw_filename, "format": fmt, "retrieved_date": retrieved_date})
 
     @bp.route("/api/source/<source_id>", methods=["POST"])
     def api_source_save(source_id):

@@ -318,10 +318,11 @@ async function submitFound(row, btn) {
     errorDiv.textContent = res.error || "Failed";
     return;
   }
-  // Color flip is the confirmation, not a text change — appending a
-  // checkmark made the button grow and get clipped in this narrow column.
+  // Straight on to the source itself — its title and download are the
+  // next thing to do.
   btn.classList.add("confirmed");
-  setTimeout(loadRows, 700);
+  await loadRows();
+  await openMetadata(row);
 }
 
 async function submitNotFound(row, btn) {
